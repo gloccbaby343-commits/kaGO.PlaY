@@ -44,7 +44,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-300 pb-8">
+    <div className="space-y-8 animate-in fade-in duration-300 pb-[calc(6rem+max(env(safe-area-inset-bottom,0px),1rem))]">
       {/* Hidden file input */}
       <input
         ref={dashFileInputRef}

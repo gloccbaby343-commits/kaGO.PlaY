@@ -122,7 +122,7 @@ export const LocalFileScannerModal: React.FC<LocalFileScannerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 pt-[max(env(safe-area-inset-top,0px),1.75rem)] pb-[max(env(safe-area-inset-bottom,0px),1.5rem)] animate-in fade-in duration-200">
       <div className="w-full max-w-2xl rounded-sm bg-[#16161a] border-2 border-[#f2efeb] shadow-2xl p-5 sm:p-6 text-[#f2efeb] flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-[#f2efeb]/15">

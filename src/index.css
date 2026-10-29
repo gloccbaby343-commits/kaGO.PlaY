@@ -7,6 +7,8 @@
     --accent: #ff3e3e;
     --surface: #16161a;
     --ink-faint: rgba(242, 239, 235, 0.1);
+    --safe-top: max(env(safe-area-inset-top, 0px), 2rem);
+    --safe-bottom: max(env(safe-area-inset-bottom, 0px), 1.25rem);
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
   }
 
@@ -17,12 +19,23 @@
     -webkit-font-smoothing: antialiased;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
   }
 
   ::selection {
     background: var(--accent);
     color: var(--bg);
   }
+}
+
+/* Mobile Status Bar & Notch Safe Area Padding */
+.pt-safe-top {
+  padding-top: max(env(safe-area-inset-top, 0px), 2.25rem);
+}
+
+.pb-safe-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 1.25rem);
 }
 
 /* Design Variation 2 Monospace Technical Label */

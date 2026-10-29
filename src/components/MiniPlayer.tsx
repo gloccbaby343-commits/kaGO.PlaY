@@ -52,7 +52,7 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <footer className="fixed bottom-16 sm:bottom-0 left-0 right-0 z-40 bg-black/65 backdrop-blur-2xl border-t border-white/[0.12] shadow-[0_-10px_35px_rgba(0,0,0,0.5)] transition-all">
+    <footer className="fixed bottom-[calc(3.75rem+max(env(safe-area-inset-bottom,0px),0.75rem))] lg:bottom-0 left-0 right-0 z-30 bg-black/65 backdrop-blur-2xl border-t border-white/[0.12] shadow-[0_-10px_35px_rgba(0,0,0,0.5)] transition-all">
       <div className="max-w-7xl mx-auto px-4 sm:px-8 py-3.5 flex flex-col md:grid md:grid-cols-[280px_1fr_240px] items-center gap-3">
         {/* Left: Now Playing */}
         <div

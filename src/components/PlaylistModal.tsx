@@ -65,7 +65,7 @@ export const PlaylistModal: React.FC<PlaylistModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 pt-[max(env(safe-area-inset-top,0px),1.75rem)] pb-[max(env(safe-area-inset-bottom,0px),1.5rem)] animate-in fade-in duration-200">
       <div className="w-full max-w-md rounded-2xl bg-black border border-zinc-900 shadow-2xl p-5 sm:p-6 text-zinc-100">
         <div className="flex items-center justify-between pb-3 border-b border-zinc-900">
           <div className="flex items-center gap-2.5">

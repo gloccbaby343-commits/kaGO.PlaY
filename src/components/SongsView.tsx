@@ -83,7 +83,7 @@ export const SongsView: React.FC<SongsViewProps> = ({
   });
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-200 p-6 sm:p-10">
+    <div className="space-y-6 animate-in fade-in duration-200 p-4 sm:p-10 pb-[calc(8rem+max(env(safe-area-inset-bottom,0px),1rem))]">
       {/* Top Controls Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-900">
         <div>

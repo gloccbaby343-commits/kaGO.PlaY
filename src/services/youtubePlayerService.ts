@@ -57,19 +57,23 @@ export class YouTubePlayerService {
   private createPlayer() {
     if (typeof window === 'undefined' || !window.YT || !window.YT.Player) return;
 
-    // Ensure hidden container exists
+    // Ensure floating mobile-friendly player container exists
     let container = document.getElementById('yt-player-host');
     if (!container) {
       container = document.createElement('div');
       container.id = 'yt-player-host';
       container.style.position = 'fixed';
-      container.style.bottom = '-9999px';
-      container.style.left = '-9999px';
-      container.style.width = '200px';
-      container.style.height = '200px';
-      container.style.opacity = '0';
-      container.style.pointerEvents = 'none';
-      container.style.zIndex = '-1';
+      container.style.bottom = '85px';
+      container.style.right = '12px';
+      container.style.width = '144px';
+      container.style.height = '81px';
+      container.style.borderRadius = '10px';
+      container.style.overflow = 'hidden';
+      container.style.backgroundColor = '#000000';
+      container.style.zIndex = '35';
+      container.style.boxShadow = '0 10px 30px rgba(0,0,0,0.85)';
+      container.style.border = '2px solid rgba(255, 62, 62, 0.4)';
+      container.style.display = 'none'; // Only displayed when video is streaming
       document.body.appendChild(container);
     }
 
@@ -79,18 +83,17 @@ export class YouTubePlayerService {
     container.appendChild(playerTarget);
 
     try {
+      const isHttp = typeof window !== 'undefined' && window.location.protocol.startsWith('http');
       this.player = new window.YT.Player('yt-player-element', {
-        height: '200',
-        width: '200',
+        height: '100%',
+        width: '100%',
         playerVars: {
-          autoplay: 0,
-          controls: 0,
-          disablekb: 1,
-          fs: 0,
-          modestbranding: 1,
+          autoplay: 1,
+          controls: 1,
           playsinline: 1,
           rel: 0,
-          iv_load_policy: 3,
+          modestbranding: 1,
+          ...(isHttp ? { origin: window.location.origin } : {}),
         },
         events: {
           onReady: () => {
@@ -159,6 +162,11 @@ export class YouTubePlayerService {
       return;
     }
 
+    const container = document.getElementById('yt-player-host');
+    if (container) {
+      container.style.display = 'block';
+    }
+
     try {
       if (autoPlay) {
         this.player.loadVideoById({
@@ -175,6 +183,18 @@ export class YouTubePlayerService {
     } catch (err) {
       console.warn('Error loading YouTube video:', err);
     }
+  }
+
+  public stop(): void {
+    this.stopTimeUpdates();
+    if (this.player && typeof this.player.stopVideo === 'function') {
+      this.player.stopVideo();
+    }
+    const container = document.getElementById('yt-player-host');
+    if (container) {
+      container.style.display = 'none';
+    }
+    this.currentVideoId = null;
   }
 
   public play(): void {

@@ -115,8 +115,8 @@ export const FullscreenPlayer: React.FC<FullscreenPlayerProps> = ({
         <div className={`w-[80vw] h-[80vw] max-w-[600px] max-h-[600px] rounded-full bg-gradient-to-tr ${currentTrack.coverGradient} absolute top-1/4 left-1/2 -translate-x-1/2`} />
       </div>
 
-      {/* Top App Bar */}
-      <div className="relative z-10 flex items-center justify-between px-4 sm:px-8 py-3.5 border-b border-[#f2efeb]/15">
+      {/* Top App Bar with Mobile Status Bar Safe Area Padding */}
+      <div className="relative z-10 flex items-center justify-between px-4 sm:px-8 pt-[max(env(safe-area-inset-top,0px),2.5rem)] pb-3.5 border-b border-[#f2efeb]/15">
         <button
           onClick={onClose}
           aria-label="Minimize player"
@@ -127,7 +127,7 @@ export const FullscreenPlayer: React.FC<FullscreenPlayerProps> = ({
 
         <div className="text-center">
           <span className="label !text-[#ff3e3e] !opacity-100">
-            Now Playing
+            {currentTrack.format === 'youtube' ? 'YouTube Stream' : 'Now Playing'}
           </span>
           <p className="font-syne text-xs text-[#f2efeb]/80 truncate max-w-[160px] sm:max-w-xs mt-0.5">
             {currentTrack.album}
@@ -185,9 +185,29 @@ export const FullscreenPlayer: React.FC<FullscreenPlayerProps> = ({
         </div>
       </div>
 
-      {/* Main Center Body */}
-      <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 sm:px-6 py-2 overflow-y-auto max-w-lg mx-auto w-full min-h-0">
-        {activeView === 'lyrics' ? (
+      {/* Main Center Body with Bottom Nav Safe Area Padding */}
+      <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 sm:px-6 pt-2 pb-[max(env(safe-area-inset-bottom,0px),2rem)] overflow-y-auto max-w-lg mx-auto w-full min-h-0">
+        {currentTrack.format === 'youtube' && currentTrack.youtubeId ? (
+          /* Native YouTube Stream Video Player */
+          <div className="relative my-auto flex flex-col items-center justify-center w-full max-w-sm sm:max-w-md">
+            <div className="relative aspect-video w-full rounded-2xl overflow-hidden shadow-2xl border-2 border-[#ff3e3e]/40 bg-black">
+              <iframe
+                id="yt-fullscreen-iframe"
+                src={`https://www.youtube-nocookie.com/embed/${currentTrack.youtubeId}?autoplay=1&playsinline=1&enablejsapi=1&rel=0&modestbranding=1`}
+                title={currentTrack.title}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+                className="w-full h-full border-0"
+              />
+            </div>
+            <div className="flex items-center gap-2 mt-3">
+              <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-sm bg-[#ff3e3e]/20 text-[#ff3e3e] border border-[#ff3e3e]/40 font-bold uppercase tracking-wider">
+                Live YouTube Stream
+              </span>
+              <span className="text-[10px] text-[#f2efeb]/60">Zero Signup • Mobile Free</span>
+            </div>
+          </div>
+        ) : activeView === 'lyrics' ? (
           <div className="w-full flex-1 flex flex-col min-h-[320px] sm:min-h-[380px] my-1">
             <SynchronizedLyricsView
               track={currentTrack}
@@ -448,7 +468,7 @@ export const FullscreenPlayer: React.FC<FullscreenPlayerProps> = ({
 
       {/* Slide-over Queue Drawer */}
       {activeView === 'queue' && (
-        <div className="absolute inset-x-0 bottom-0 top-16 z-30 bg-black/98 backdrop-blur-2xl border-t border-zinc-900 p-5 flex flex-col animate-in slide-in-from-bottom duration-200">
+        <div className="absolute inset-x-0 bottom-0 top-[max(env(safe-area-inset-top,0px),4.5rem)] pb-[max(env(safe-area-inset-bottom,0px),1.5rem)] z-30 bg-black/98 backdrop-blur-2xl border-t border-zinc-900 p-5 flex flex-col animate-in slide-in-from-bottom duration-200">
           <div className="flex items-center justify-between pb-3 border-b border-zinc-900">
             <div className="flex items-center gap-2">
               <ListMusic className="w-5 h-5 text-red-500" />
@@ -508,7 +528,7 @@ export const FullscreenPlayer: React.FC<FullscreenPlayerProps> = ({
 
       {/* Slide-over Info Drawer */}
       {activeView === 'info' && (
-        <div className="absolute inset-x-0 bottom-0 top-16 z-30 bg-black/98 backdrop-blur-2xl border-t border-zinc-900 p-6 flex flex-col animate-in slide-in-from-bottom duration-200">
+        <div className="absolute inset-x-0 bottom-0 top-[max(env(safe-area-inset-top,0px),4.5rem)] pb-[max(env(safe-area-inset-bottom,0px),1.5rem)] z-30 bg-black/98 backdrop-blur-2xl border-t border-zinc-900 p-6 flex flex-col animate-in slide-in-from-bottom duration-200">
           <div className="flex items-center justify-between pb-3 border-b border-zinc-900">
             <h3 className="font-bold text-sm text-zinc-100">Audio Track Properties</h3>
             <button onClick={() => setActiveView('turntable')} className="text-xs text-red-400 hover:underline font-bold">

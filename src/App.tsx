@@ -703,7 +703,7 @@ export default function App() {
         )}
 
         {/* Scrollable Viewport with Variation 2 background */}
-        <main className="flex-1 overflow-y-auto bg-gradient-to-b from-[#111115] to-[#0c0c0e] pb-32">
+        <main className="flex-1 overflow-y-auto bg-gradient-to-b from-[#111115] to-[#0c0c0e] pb-[calc(10rem+max(env(safe-area-inset-bottom,0px),1rem))]">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center h-64 gap-3 text-zinc-400">
               <Loader2 className="w-8 h-8 animate-spin text-red-500" />
