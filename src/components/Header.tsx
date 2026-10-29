@@ -33,7 +33,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-30 bg-black/60 backdrop-blur-2xl border-b border-white/[0.08] shadow-[0_4px_30px_rgba(0,0,0,0.3)] px-4 sm:px-8 pt-[max(env(safe-area-inset-top,0px),2.25rem)] pb-3.5 flex items-center justify-between gap-3 transition-colors">
+    <header className="sticky top-0 z-30 bg-black/60 backdrop-blur-2xl border-b border-white/[0.08] shadow-[0_4px_30px_rgba(0,0,0,0.3)] px-4 sm:px-8 pt-safe-top pb-3.5 flex items-center justify-between gap-3 transition-colors">
       {/* Brand Logo (Visible on mobile header) */}
       <div className="flex items-center gap-2.5 lg:hidden shrink-0">
         <div className="w-8 h-8 rounded-xl bg-[#ff3e3e] flex items-center justify-center shadow-[0_0_15px_rgba(255,62,62,0.4)]">

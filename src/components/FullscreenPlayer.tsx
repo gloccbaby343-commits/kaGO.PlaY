@@ -116,7 +116,7 @@ export const FullscreenPlayer: React.FC<FullscreenPlayerProps> = ({
       </div>
 
       {/* Top App Bar with Mobile Status Bar Safe Area Padding */}
-      <div className="relative z-10 flex items-center justify-between px-4 sm:px-8 pt-[max(env(safe-area-inset-top,0px),2.5rem)] pb-3.5 border-b border-[#f2efeb]/15">
+      <div className="relative z-10 flex items-center justify-between px-4 sm:px-8 pt-safe-top pb-3.5 border-b border-[#f2efeb]/15">
         <button
           onClick={onClose}
           aria-label="Minimize player"
@@ -186,7 +186,7 @@ export const FullscreenPlayer: React.FC<FullscreenPlayerProps> = ({
       </div>
 
       {/* Main Center Body with Bottom Nav Safe Area Padding */}
-      <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 sm:px-6 pt-2 pb-[max(env(safe-area-inset-bottom,0px),2rem)] overflow-y-auto max-w-lg mx-auto w-full min-h-0">
+      <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 sm:px-6 pt-2 pb-safe-bottom pb-[max(env(safe-area-inset-bottom,0px),2rem)] overflow-y-auto max-w-lg mx-auto w-full min-h-0">
         {currentTrack.format === 'youtube' && currentTrack.youtubeId ? (
           /* Native YouTube Stream Video Player */
           <div className="relative my-auto flex flex-col items-center justify-center w-full max-w-sm sm:max-w-md">
