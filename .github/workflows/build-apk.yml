@@ -3,6 +3,7 @@ name: Build Android APK
 on:
   push:
     branches: [ "main", "master" ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -11,21 +12,23 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
         with:
-          node-version: 18
+          bun-version: latest
 
       - name: Install Dependencies
-        run: npm install
+        run: bun install
 
-      - name: Add & Configure Capacitor
+      - name: Build Web App
+        run: bun run build
+
+      - name: Add Capacitor
         run: |
-          npm install @capacitor/core @capacitor/cli @capacitor/android
-          npx cap init kaGO.PlaY com.kagoplay.app --web-dir dist
-          npx cap add android
-          npm run build
-          npx cap sync android
+          bunx @capacitor/cli init "kaGO PlaY" "com.kagoplay.app" --web-dir dist
+          bun add @capacitor/core @capacitor/android
+          bunx cap add android
+          bunx cap copy android
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -39,7 +42,7 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: Upload APK
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
