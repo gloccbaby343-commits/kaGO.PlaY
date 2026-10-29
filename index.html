@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>kaGO.PIaY - Offline Music Player & Mobile Audio Engine</title>
+    <meta name="description" content="kaGO.PIaY: Offline music player & free YouTube streaming engine with local file scanning, synchronized lyrics, audio visualizer, background playback, and 5-band EQ with zero sign-up required." />
+    
+    <!-- OpenGraph / Social -->
+    <meta property="og:title" content="kaGO.PIaY - Offline Music Player & Mobile Audio Engine" />
+    <meta property="og:description" content="kaGO.PIaY: Offline music player & free YouTube streaming engine with local file scanning, synchronized lyrics, audio visualizer, background playback, and 5-band EQ with zero sign-up required." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <!-- PWA & Mobile Meta Tags -->
+    <meta name="theme-color" content="#000000" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="kaGO.PIaY" />
+    
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <script>
+      // Suppress and gracefully stub Vite HMR WebSocket in cloud preview/iframe environments
+      (function() {
+        if (typeof window !== 'undefined') {
+          var OrigWebSocket = window.WebSocket;
+          if (OrigWebSocket) {
+            window.WebSocket = function(url, protocols) {
+              if (
+                protocols === 'vite-hmr' || 
+                (typeof protocols === 'string' && protocols.includes('vite')) || 
+                (Array.isArray(protocols) && protocols.includes('vite-hmr'))
+              ) {
+                var dummy = new EventTarget();
+                dummy.binaryType = 'blob';
+                dummy.readyState = 1; // WebSocket.OPEN
+                dummy.url = String(url);
+                dummy.protocol = 'vite-hmr';
+                dummy.extensions = '';
+                dummy.bufferedAmount = 0;
+                dummy.send = function() {};
+                dummy.close = function() {};
+                setTimeout(function() {
+                  try {
+                    dummy.dispatchEvent(new Event('open'));
+                  } catch (e) {}
+                }, 10);
+                return dummy;
+              }
+              return new OrigWebSocket(url, protocols);
+            };
+            window.WebSocket.prototype = OrigWebSocket.prototype;
+            window.WebSocket.CONNECTING = OrigWebSocket.CONNECTING;
+            window.WebSocket.OPEN = OrigWebSocket.OPEN;
+            window.WebSocket.CLOSING = OrigWebSocket.CLOSING;
+            window.WebSocket.CLOSED = OrigWebSocket.CLOSED;
+          }
+
+          // Error and rejection suppressors for WebSocket / HMR messages
+          window.addEventListener('error', function(e) {
+            if (e && (
+              (e.message && (e.message.includes('WebSocket') || e.message.includes('ws://') || e.message.includes('wss://') || e.message.includes('@vite/client'))) ||
+              (e.error && e.error.message && (e.error.message.includes('WebSocket') || e.error.message.includes('ws://') || e.error.message.includes('wss://')))
+            )) {
+              e.preventDefault();
+              e.stopImmediatePropagation();
+              return true;
+            }
+          }, true);
+
+          window.addEventListener('unhandledrejection', function(e) {
+            if (e && e.reason) {
+              var msg = typeof e.reason === 'string' ? e.reason : (e.reason.message || '');
+              if (msg.includes('WebSocket') || msg.includes('ws://') || msg.includes('wss://') || msg.includes('@vite/client')) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                return true;
+              }
+            }
+          }, true);
+
+          var origOnError = window.onerror;
+          window.onerror = function(msg, url, lineNo, colNo, error) {
+            var str = String(msg || '') + ' ' + String(url || '') + ' ' + (error ? String(error.message || '') : '');
+            if (str.includes('WebSocket') || str.includes('ws://') || str.includes('wss://') || str.includes('@vite/client')) {
+              return true;
+            }
+            if (origOnError) return origOnError.apply(this, arguments);
+            return false;
+          };
+        }
+      })();
+    </script>
+  </head>
+  <body class="bg-black text-zinc-100 antialiased selection:bg-red-600 selection:text-white overflow-x-hidden min-h-screen">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

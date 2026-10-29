@@ -1,0 +1,6 @@
+{
+  "name": "kaGO.PIaY - Offline Music Player & Mobile Audio Engine",
+  "description": "kaGO.PIaY: Offline music player & free YouTube streaming engine with local file scanning, synchronized lyrics, audio visualizer, background playback, and 5-band EQ with zero sign-up required.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
