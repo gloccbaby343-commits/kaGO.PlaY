@@ -21,11 +21,13 @@ import {
   Mic2,
   RotateCcw,
   RotateCw,
+  Sparkles,
 } from 'lucide-react';
 import { RepeatMode, Track } from '../types/audio';
 import { formatFileSize, formatTime } from '../utils/formatters';
 import { VisualizerCanvas } from './VisualizerCanvas';
 import { SynchronizedLyricsView } from './SynchronizedLyricsView';
+import { parseLRC, getActiveLyricIndex } from '../utils/lrcParser';
 
 import defaultCoverImage from '../assets/images/kago_default_cover_1793108092140.jpg';
 
@@ -61,6 +63,10 @@ interface FullscreenPlayerProps {
   bassBoostEnabled?: boolean;
   onToggleBassBoost?: () => void;
   initialView?: 'turntable' | 'lyrics' | 'queue' | 'info';
+  onGenerateAlbumArt?: (track: Track, preferAi?: boolean) => void;
+  onAttachLrc?: (trackId: string, file: File) => Promise<void>;
+  onSaveLrcText?: (trackId: string, lrcText: string, fileName?: string) => Promise<void>;
+  onUpdateOffset?: (trackId: string, offset: number) => void;
 }
 
 export const FullscreenPlayer: React.FC<FullscreenPlayerProps> = ({
@@ -93,9 +99,27 @@ export const FullscreenPlayer: React.FC<FullscreenPlayerProps> = ({
   bassBoostEnabled = false,
   onToggleBassBoost,
   initialView = 'turntable',
+  onGenerateAlbumArt,
+  onAttachLrc,
+  onSaveLrcText,
+  onUpdateOffset,
 }) => {
   const [activeView, setActiveView] = useState<'turntable' | 'lyrics' | 'queue' | 'info'>(initialView);
   const [visualizerMode, setVisualizerMode] = useState<'bars' | 'wave'>('bars');
+
+  // Compute currently active lyric line text for live preview in turntable mode
+  const activeLyricSnippet = React.useMemo(() => {
+    if (!currentTrack) return null;
+    const raw = currentTrack.syncedLyrics || currentTrack.lrcContent;
+    if (!raw) return null;
+    const parsed = parseLRC(raw);
+    if (parsed.lines.length === 0) return null;
+    const idx = getActiveLyricIndex(parsed.lines, currentTime, currentTrack.lrcOffset || 0);
+    if (idx >= 0 && parsed.lines[idx]) {
+      return parsed.lines[idx].text;
+    }
+    return null;
+  }, [currentTrack, currentTime]);
 
   React.useEffect(() => {
     if (isOpen && initialView) {
@@ -208,7 +232,7 @@ export const FullscreenPlayer: React.FC<FullscreenPlayerProps> = ({
             </div>
           </div>
         ) : activeView === 'lyrics' ? (
-          <div className="w-full flex-1 flex flex-col min-h-[320px] sm:min-h-[380px] my-1">
+          <div className="w-full flex-1 flex flex-col min-h-[360px] sm:min-h-[440px] max-h-[500px] my-2 rounded-2xl overflow-hidden border border-white/[0.08] bg-black/40 backdrop-blur-xl shadow-2xl">
             <SynchronizedLyricsView
               track={currentTrack}
               currentTime={currentTime}
@@ -216,6 +240,9 @@ export const FullscreenPlayer: React.FC<FullscreenPlayerProps> = ({
               isPlaying={isPlaying}
               onSeek={onSeek}
               onClose={() => setActiveView('turntable')}
+              onAttachLrc={onAttachLrc}
+              onSaveLrcText={onSaveLrcText}
+              onUpdateOffset={onUpdateOffset}
             />
           </div>
         ) : (
@@ -270,15 +297,47 @@ export const FullscreenPlayer: React.FC<FullscreenPlayerProps> = ({
                 </button>
               </div>
 
-              {/* Quick Lyrics Access Button */}
-              <button
-                onClick={() => setActiveView('lyrics')}
-                className="label flex items-center gap-1.5 px-3.5 py-1.5 mt-3 border border-[#ff3e3e]/40 hover:border-[#ff3e3e] text-[#ff3e3e] !opacity-100 transition active:scale-95 cursor-pointer rounded-sm"
-                title="Open Synchronized Lyrics"
-              >
-                <Mic2 className="w-3.5 h-3.5 text-[#ff3e3e]" />
-                <span>Synchronized Lyrics</span>
-              </button>
+              {/* Quick Actions: Lyrics & AI Album Art */}
+              <div className="flex items-center gap-2 mt-3">
+                <button
+                  onClick={() => setActiveView('lyrics')}
+                  className={`label flex items-center gap-1.5 px-3 py-1.5 border !opacity-100 transition active:scale-95 cursor-pointer rounded-xl ${
+                    (currentTrack.syncedLyrics || currentTrack.lrcContent)
+                      ? 'border-[#ff3e3e]/60 bg-[#ff3e3e]/15 text-[#ff3e3e] shadow-[0_0_12px_rgba(255,62,62,0.3)]'
+                      : 'border-white/[0.12] bg-white/[0.05] hover:border-white/[0.25] text-zinc-300 hover:text-white'
+                  }`}
+                  title="Open Synchronized Lyrics"
+                >
+                  <Mic2 className="w-3.5 h-3.5 text-[#ff3e3e]" />
+                  <span>
+                    {(currentTrack.syncedLyrics || currentTrack.lrcContent) ? 'Synced Lyrics' : 'Lyrics'}
+                  </span>
+                </button>
+                {onGenerateAlbumArt && (
+                  <button
+                    onClick={() => onGenerateAlbumArt(currentTrack, true)}
+                    className="label flex items-center gap-1.5 px-3 py-1.5 border border-purple-500/40 hover:border-purple-500 text-purple-300 hover:text-white !opacity-100 transition active:scale-95 cursor-pointer rounded-xl bg-purple-950/20"
+                    title="Analyze track and generate unique visualizer album cover using Gemini API"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                    <span>AI Visualizer Art</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Interactive Live Synced Lyric Ticker in Turntable Mode */}
+              {activeLyricSnippet && (
+                <button
+                  onClick={() => setActiveView('lyrics')}
+                  className="w-full max-w-xs sm:max-w-sm mt-3 px-3.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-[#ff3e3e]/10 border border-white/[0.08] hover:border-[#ff3e3e]/30 flex items-center justify-center gap-2 text-xs text-zinc-300 hover:text-white transition group cursor-pointer animate-in fade-in duration-200"
+                  title="Click to expand synchronized scrolling lyrics"
+                >
+                  <Mic2 className="w-3 h-3 text-[#ff3e3e] shrink-0 animate-pulse" />
+                  <span className="font-syne font-semibold truncate group-hover:text-[#ff3e3e] transition-colors">
+                    {activeLyricSnippet}
+                  </span>
+                </button>
+              )}
             </div>
           </div>
         )}

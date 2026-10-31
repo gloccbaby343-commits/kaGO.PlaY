@@ -1,65 +1,18 @@
 import { Track, LyricLine, TrackLyrics } from '../types/audio';
 import { toEnglishOnly } from '../utils/englishSanitizer';
+import { parseLRC as parseLrcFull, getActiveLyricIndex as getActiveLyricIndexFull } from '../utils/lrcParser';
 
 // In-memory cache for fetched lyrics to avoid repeated network requests
 const lyricsCache = new Map<string, TrackLyrics>();
 
 /**
- * Parses LRC format string (e.g. [01:23.45] Lyric line text) into structured LyricLine[]
+ * Parses LRC format string into structured LyricLine[] using robust parser
  */
 export function parseLRC(lrcText: string): LyricLine[] {
-  if (!lrcText || typeof lrcText !== 'string') return [];
-
-  const lines = lrcText.split('\n');
-  const result: LyricLine[] = [];
-
-  // Match standard timestamp [mm:ss.xx] or [mm:ss.xxx] or [mm:ss]
-  const timeRegex = /\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]/g;
-
-  for (const rawLine of lines) {
-    const trimmed = rawLine.trim();
-    if (!trimmed) continue;
-
-    // Skip metadata tags like [ti:Title], [ar:Artist], [al:Album], [offset:0]
-    if (/^\[(ti|ar|al|by|offset|length|re|ve):/i.test(trimmed)) {
-      continue;
-    }
-
-    // Extract all timestamps on this line
-    const timestamps: number[] = [];
-    let match: RegExpExecArray | null;
-
-    // Reset regex index
-    timeRegex.lastIndex = 0;
-    while ((match = timeRegex.exec(trimmed)) !== null) {
-      const minutes = parseInt(match[1], 10);
-      const seconds = parseInt(match[2], 10);
-      const millisStr = match[3] || '0';
-      const millis = parseInt(millisStr.padEnd(3, '0').slice(0, 3), 10);
-
-      const totalSeconds = minutes * 60 + seconds + millis / 1000;
-      timestamps.push(totalSeconds);
-    }
-
-    if (timestamps.length === 0) continue;
-
-    // Strip timestamps to get the lyric text
-    const textPart = trimmed.replace(timeRegex, '').trim();
-    const cleanText = textPart ? toEnglishOnly(textPart, textPart) : '♪';
-
-    for (const time of timestamps) {
-      result.push({
-        time,
-        text: cleanText,
-      });
-    }
-  }
-
-  // Sort chronologically
-  result.sort((a, b) => a.time - b.time);
-
-  return result;
+  return parseLrcFull(lrcText).lines;
 }
+
+export { getActiveLyricIndexFull as getActiveLyricIndex };
 
 /**
  * Fetches synchronized lyrics for a track using the external metadata service (LRCLIB),
@@ -80,16 +33,17 @@ export async function fetchTrackLyrics(track: Track): Promise<TrackLyrics> {
     return lyricsCache.get(track.id)!;
   }
 
-  // 2. Check if track already has embedded synced lyrics
-  if (track.syncedLyrics) {
-    const parsed = parseLRC(track.syncedLyrics);
+  // 2. Check if track already has embedded synced lyrics or loaded .lrc file
+  const rawLrc = track.syncedLyrics || track.lrcContent;
+  if (rawLrc) {
+    const parsed = parseLrcFull(rawLrc);
     const item: TrackLyrics = {
       trackId: track.id,
-      syncedLyrics: track.syncedLyrics,
+      syncedLyrics: rawLrc,
       plainLyrics: track.plainLyrics,
-      parsedLines: parsed,
-      source: 'Embedded Audio Tags',
-      isInstrumental: parsed.length === 0,
+      parsedLines: parsed.lines,
+      source: track.lrcFileName ? `LRC File (${track.lrcFileName})` : 'Synchronized LRC',
+      isInstrumental: parsed.lines.length === 0,
     };
     lyricsCache.set(track.id, item);
     return item;
@@ -171,34 +125,4 @@ export async function fetchTrackLyrics(track: Track): Promise<TrackLyrics> {
 
   lyricsCache.set(track.id, fallbackResult);
   return fallbackResult;
-}
-
-/**
- * Finds the index of the currently active lyric line for currentTime + offsetSeconds
- */
-export function getActiveLyricIndex(
-  lines: LyricLine[],
-  currentTime: number,
-  offsetSeconds: number = 0
-): number {
-  if (!lines || lines.length === 0) return -1;
-
-  const adjustedTime = Math.max(0, currentTime + offsetSeconds);
-
-  // If before the first line
-  if (adjustedTime < lines[0].time) {
-    return 0;
-  }
-
-  // Linear search from top
-  for (let i = 0; i < lines.length; i++) {
-    const current = lines[i];
-    const next = lines[i + 1];
-
-    if (adjustedTime >= current.time && (!next || adjustedTime < next.time)) {
-      return i;
-    }
-  }
-
-  return lines.length - 1;
 }

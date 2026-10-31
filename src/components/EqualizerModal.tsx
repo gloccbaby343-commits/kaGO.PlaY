@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Sliders, X, RotateCcw, Volume2, Sparkles, Power, Zap, Layers } from 'lucide-react';
+import { Sliders, X, RotateCcw, Volume2, Sparkles, Power, Zap, Layers, Smartphone, Vibrate } from 'lucide-react';
 import { EQ_PRESETS, audioEngine } from '../services/audioEngine';
 import { EqualizerPreset } from '../types/audio';
+import { hapticsService } from '../services/hapticsService';
 
 interface EqualizerModalProps {
   isOpen: boolean;
@@ -12,7 +13,8 @@ interface EqualizerModalProps {
     bassBoost: number,
     bassBoostEnabled: boolean,
     crossfade?: number,
-    gapless?: boolean
+    gapless?: boolean,
+    haptics?: boolean
   ) => void;
 }
 
@@ -23,6 +25,8 @@ export const EqualizerModal: React.FC<EqualizerModalProps> = ({ isOpen, onClose,
   const [bassBoostEnabled, setBassBoostEnabled] = useState<boolean>(() => audioEngine.getBassBoostEnabled());
   const [crossfadeDuration, setCrossfadeDuration] = useState<number>(() => audioEngine.getCrossfadeDuration());
   const [gaplessEnabled, setGaplessEnabled] = useState<boolean>(() => audioEngine.getGaplessEnabled());
+  const [hapticsEnabled, setHapticsEnabled] = useState<boolean>(() => hapticsService.isEnabled());
+  const isVibrationSupported = hapticsService.isSupported();
 
   if (!isOpen) return null;
 
@@ -35,36 +39,59 @@ export const EqualizerModal: React.FC<EqualizerModalProps> = ({ isOpen, onClose,
     setGains(updated);
     setSelectedPreset('Custom');
     audioEngine.setEqGain(index, val);
-    onSave?.('Custom', updated, bassBoost, bassBoostEnabled, crossfadeDuration, gaplessEnabled);
+    hapticsService.light();
+    onSave?.('Custom', updated, bassBoost, bassBoostEnabled, crossfadeDuration, gaplessEnabled, hapticsEnabled);
   };
 
   const handleBassToggle = () => {
     const nextState = !bassBoostEnabled;
     setBassBoostEnabled(nextState);
     audioEngine.setBassBoostEnabled(nextState);
-    onSave?.(selectedPreset, gains, bassBoost, nextState, crossfadeDuration, gaplessEnabled);
+    if (nextState) {
+      hapticsService.bassImpact();
+    } else {
+      hapticsService.light();
+    }
+    onSave?.(selectedPreset, gains, bassBoost, nextState, crossfadeDuration, gaplessEnabled, hapticsEnabled);
   };
 
   const handleBassChange = (val: number) => {
     setBassBoost(val);
     audioEngine.setBassBoost(val);
-    onSave?.(selectedPreset, gains, val, bassBoostEnabled, crossfadeDuration, gaplessEnabled);
+    onSave?.(selectedPreset, gains, val, bassBoostEnabled, crossfadeDuration, gaplessEnabled, hapticsEnabled);
   };
 
   const handleGaplessToggle = () => {
     const nextState = !gaplessEnabled;
     setGaplessEnabled(nextState);
     audioEngine.setGaplessEnabled(nextState);
-    onSave?.(selectedPreset, gains, bassBoost, bassBoostEnabled, crossfadeDuration, nextState);
+    hapticsService.light();
+    onSave?.(selectedPreset, gains, bassBoost, bassBoostEnabled, crossfadeDuration, nextState, hapticsEnabled);
   };
 
   const handleCrossfadeChange = (val: number) => {
     setCrossfadeDuration(val);
     audioEngine.setCrossfadeDuration(val);
-    onSave?.(selectedPreset, gains, bassBoost, bassBoostEnabled, val, gaplessEnabled);
+    hapticsService.light();
+    onSave?.(selectedPreset, gains, bassBoost, bassBoostEnabled, val, gaplessEnabled, hapticsEnabled);
+  };
+
+  const handleToggleHaptics = () => {
+    const next = !hapticsEnabled;
+    setHapticsEnabled(next);
+    hapticsService.setEnabled(next);
+    if (next) {
+      hapticsService.playPause();
+    }
+    onSave?.(selectedPreset, gains, bassBoost, bassBoostEnabled, crossfadeDuration, gaplessEnabled, next);
+  };
+
+  const handleTestVibration = () => {
+    hapticsService.trackChange();
   };
 
   const handlePresetSelect = (preset: EqualizerPreset) => {
+    hapticsService.light();
     setSelectedPreset(preset.name);
     setGains([...preset.gains]);
     let nextBassBoost = bassBoost;
@@ -72,6 +99,7 @@ export const EqualizerModal: React.FC<EqualizerModalProps> = ({ isOpen, onClose,
     if (preset.bassBoost !== undefined) {
       nextBassBoost = preset.bassBoost;
       setBassBoost(nextBassBoost);
+
     }
     if (preset.bassBoostEnabled !== undefined) {
       nextBassBoostEnabled = preset.bassBoostEnabled;
@@ -396,7 +424,66 @@ export const EqualizerModal: React.FC<EqualizerModalProps> = ({ isOpen, onClose,
           </div>
         </div>
 
+        {/* Mobile Vibration / Tactile Feedback Section */}
+        <div className="mt-4 p-4 rounded-xl bg-zinc-950/80 border border-zinc-900 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-red-600/15 text-red-400 border border-red-500/20">
+                <Vibrate className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs font-bold text-zinc-100">Tactile Haptics (Vibration API)</h4>
+                  <span
+                    className={`text-[9px] font-mono px-2 py-0.5 rounded-full border ${
+                      isVibrationSupported
+                        ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                        : 'bg-zinc-800 border-zinc-700 text-zinc-400'
+                    }`}
+                  >
+                    {isVibrationSupported ? 'Active' : 'Fallback'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-zinc-400">
+                  Physical vibration feedback on Play/Pause, track skips, favorites, and bass boost.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              role="switch"
+              aria-checked={hapticsEnabled}
+              onClick={handleToggleHaptics}
+              className={`relative inline-flex h-6 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                hapticsEnabled ? 'bg-red-600' : 'bg-zinc-800'
+              }`}
+            >
+              <span
+                className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                  hapticsEnabled ? 'translate-x-6 shadow-md' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+          </div>
+
+          {hapticsEnabled && (
+            <div className="flex items-center justify-between pt-1 border-t border-zinc-900/80">
+              <span className="text-[11px] text-zinc-400">Test tactile haptic motor:</span>
+              <button
+                type="button"
+                onClick={handleTestVibration}
+                className="px-3 py-1 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.12] text-xs font-medium text-white transition active:scale-95 cursor-pointer flex items-center gap-1.5"
+              >
+                <Smartphone className="w-3.5 h-3.5 text-red-400" />
+                <span>Test Pulse</span>
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* Footer */}
+
         <div className="mt-6 flex justify-end gap-2">
           <button
             onClick={onClose}

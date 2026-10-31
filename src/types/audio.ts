@@ -15,8 +15,22 @@ export interface Track {
   isFavorite?: boolean;
   isCustom?: boolean; // uploaded by user from device
   fileName?: string;
-  syncedLyrics?: string;
+  folderName?: string; // Name of uploaded device folder
+  syncedLyrics?: string; // Standard LRC timestamped text
   plainLyrics?: string;
+  lrcContent?: string; // Raw LRC file content
+  lrcFileName?: string; // Original .lrc filename (e.g. song.lrc)
+  hasSyncedLyrics?: boolean;
+  lrcOffset?: number; // Timing offset in seconds for playback calibration
+}
+
+export interface UploadedFolder {
+  id: string;
+  name: string;
+  trackCount: number;
+  totalDuration: number;
+  tracks: Track[];
+  coverGradient?: string;
 }
 
 export interface LyricLine {

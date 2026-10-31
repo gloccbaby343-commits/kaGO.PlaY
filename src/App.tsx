@@ -9,8 +9,9 @@ import { generateDemoTracks } from './utils/audioSynthesizer';
 import { storageService } from './services/storageService';
 import { audioEngine, EQ_PRESETS } from './services/audioEngine';
 import { getNextTrackIndex, getPreviousTrackIndex, generateShuffleIndices } from './utils/queueManager';
+import { parseAudioFile, cleanFileName, hasCjkOrForeignGibberish } from './utils/id3Parser';
 import { filterTracks } from './utils/playlistUtils';
-import { parseAudioFile, cleanFileName } from './utils/id3Parser';
+import { hapticsService } from './services/hapticsService';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { BottomNav } from './components/BottomNav';
@@ -29,7 +30,9 @@ import { PlaylistsView } from './components/PlaylistsView';
 import { AiStudioView } from './components/AiStudioView';
 import { YouTubeStreamView } from './components/YouTubeStreamView';
 import { youtubePlayerService } from './services/youtubePlayerService';
+import { albumArtService } from './services/albumArtService';
 import { sanitizeTrackToEnglish } from './utils/englishSanitizer';
+import { parseLRC } from './utils/lrcParser';
 import { WifiOff, Loader2, CheckCircle2, Zap } from 'lucide-react';
 
 export default function App() {
@@ -111,7 +114,7 @@ export default function App() {
         const recents = await storageService.getRecentTrackIds().catch(() => []);
 
         // Merge all tracks, auto-healing any old legacy placeholder corruptions
-        const allLoaded = [...storedTracks, ...demoTracks].map((t, idx) => {
+        let allLoaded = [...storedTracks, ...demoTracks].map((t, idx) => {
           let healedTitle = t.title;
           let healedArtist = t.artist;
           if (
@@ -178,9 +181,30 @@ export default function App() {
             setGaplessEnabled(settings.gaplessEnabled);
             audioEngine.setGaplessEnabled(settings.gaplessEnabled);
           }
+          if (settings.hapticsEnabled !== undefined) {
+            hapticsService.setEnabled(settings.hapticsEnabled);
+          }
         }
 
+
         if (mounted) {
+          allLoaded = allLoaded.map((t, idx) => {
+            if (
+              hasCjkOrForeignGibberish(t.title) ||
+              hasCjkOrForeignGibberish(t.artist) ||
+              t.title.toLowerCase().includes('english melody')
+            ) {
+              const cleaned = cleanFileName(t.fileName || t.title);
+              return {
+                ...t,
+                title: cleaned.title || `Offline Track ${idx + 1}`,
+                artist: cleaned.artist !== 'Unknown Artist' ? cleaned.artist : 'Local Artist',
+                album: hasCjkOrForeignGibberish(t.album) ? 'Device Storage' : t.album,
+              };
+            }
+            return t;
+          });
+
           setTracks(allLoaded);
           setPlaylists(pls);
           setFavoriteIds(favSet);
@@ -232,6 +256,9 @@ export default function App() {
   const handleNextTrack = useCallback(
     (isAutomatic = false) => {
       if (queue.length === 0) return;
+      if (!isAutomatic) {
+        hapticsService.trackChange();
+      }
       const nextIdx = getNextTrackIndex(queueIndex, queue.length, repeatMode, isShuffle, shuffleIndices);
       if (nextIdx !== null) {
         handlePlayQueueIndex(nextIdx);
@@ -249,6 +276,7 @@ export default function App() {
   );
 
   const handlePreviousTrack = useCallback(() => {
+    hapticsService.trackChange();
     if (currentTime > 3) {
       if (currentTrack?.format === 'youtube') {
         youtubePlayerService.seekTo(0);
@@ -260,6 +288,7 @@ export default function App() {
     const prevIdx = getPreviousTrackIndex(queueIndex, queue.length, repeatMode, isShuffle, shuffleIndices);
     handlePlayQueueIndex(prevIdx);
   }, [currentTime, queueIndex, queue.length, repeatMode, isShuffle, shuffleIndices, handlePlayQueueIndex, currentTrack]);
+
 
   // --- Sync Upcoming Queue Track for Gapless Pre-Buffering & Crossfading ---
   useEffect(() => {
@@ -360,6 +389,7 @@ export default function App() {
 
   // --- Controls Handlers ---
   const handleTogglePlayPause = () => {
+    hapticsService.playPause();
     if (!currentTrack && tracks.length > 0) {
       handlePlayQueueIndex(0, tracks);
       return;
@@ -372,6 +402,7 @@ export default function App() {
   };
 
   const handleSeek = (time: number) => {
+    hapticsService.light();
     setCurrentTime(time);
     if (currentTrack?.format === 'youtube') {
       youtubePlayerService.seekTo(time);
@@ -390,6 +421,7 @@ export default function App() {
   };
 
   const handleToggleMute = () => {
+    hapticsService.light();
     const nextMuted = !isMuted;
     setIsMuted(nextMuted);
     audioEngine.setMute(nextMuted);
@@ -397,12 +429,14 @@ export default function App() {
   };
 
   const handleToggleRepeat = () => {
+    hapticsService.light();
     const modes: RepeatMode[] = ['off', 'all', 'one'];
     const nextMode = modes[(modes.indexOf(repeatMode) + 1) % modes.length];
     setRepeatMode(nextMode);
   };
 
   const handleToggleShuffle = () => {
+    hapticsService.light();
     const nextShuffle = !isShuffle;
     setIsShuffle(nextShuffle);
     if (nextShuffle) {
@@ -416,6 +450,11 @@ export default function App() {
     const next = !bassBoostEnabled;
     setBassBoostEnabled(next);
     audioEngine.setBassBoostEnabled(next);
+    if (next) {
+      hapticsService.bassImpact();
+    } else {
+      hapticsService.light();
+    }
 
     setToastMessage(`Bass Boost ${next ? 'Activated (+8 dB)' : 'Disabled'}`);
     setTimeout(() => setToastMessage(null), 2500);
@@ -429,10 +468,12 @@ export default function App() {
       eqGains: audioEngine.getEqGains(),
       bassBoost: bassBoostLevel,
       bassBoostEnabled: next,
+      hapticsEnabled: hapticsService.isEnabled(),
     }).catch(() => {});
   };
 
   const handleToggleFavorite = async (target?: string | Track) => {
+    hapticsService.favorite();
     let id: string | undefined;
     let trackObj: Track | undefined;
     if (typeof target === 'string') {
@@ -448,6 +489,7 @@ export default function App() {
 
     const isFav = favoriteIds.has(id);
     const nextFav = !isFav;
+
 
     const updated = new Set(favoriteIds);
     if (nextFav) {
@@ -515,35 +557,175 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // --- Clear Corrupted / Legacy Placeholder Tracks ---
+  // --- Fetch or Generate Unique Visualizer Album Art via Gemini API ---
+  const handleGenerateAlbumArt = async (track: Track, preferAi = false) => {
+    try {
+      setToastMessage(`Analyzing "${track.title}" with Gemini AI...`);
+      const result = await albumArtService.fetchOrGenerateAlbumArt(track, preferAi);
+      if (result.coverArtUrl) {
+        const updatedTrack: Track = { ...track, coverArtUrl: result.coverArtUrl };
+        await storageService.updateTrackMetadata(track.id, { coverArtUrl: result.coverArtUrl }).catch(() => {});
+
+        setTracks((prev) => prev.map((t) => (t.id === track.id ? updatedTrack : t)));
+        setQueue((prev) => prev.map((t) => (t.id === track.id ? updatedTrack : t)));
+        if (currentTrack?.id === track.id) {
+          setCurrentTrack(updatedTrack);
+        }
+
+        const sourceLabel =
+          result.source === 'gemini-api'
+            ? 'Gemini AI Visualizer'
+            : result.source === 'itunes'
+            ? 'Official Cover'
+            : 'Custom Visualizer';
+        setToastMessage(`Album art generated for "${track.title}" (${sourceLabel})`);
+        setTimeout(() => setToastMessage(null), 3500);
+      }
+    } catch (err) {
+      console.error('Failed to generate album art:', err);
+      setToastMessage(`Could not generate album art for "${track.title}"`);
+      setTimeout(() => setToastMessage(null), 3000);
+    }
+  };
+
+  const handleBatchGenerateAlbumArt = async () => {
+    const missing = tracks.filter((t) => !t.coverArtUrl || t.coverArtUrl.startsWith('blob:'));
+    if (missing.length === 0) {
+      setToastMessage('All songs in your library already have album art!');
+      setTimeout(() => setToastMessage(null), 2500);
+      return;
+    }
+
+    setToastMessage(`Generating AI visualizer art for ${missing.length} track${missing.length > 1 ? 's' : ''}...`);
+    let count = 0;
+    for (const t of missing) {
+      try {
+        const res = await albumArtService.fetchOrGenerateAlbumArt(t, false);
+        if (res.coverArtUrl) {
+          await storageService.updateTrackMetadata(t.id, { coverArtUrl: res.coverArtUrl }).catch(() => {});
+          setTracks((prev) => prev.map((item) => (item.id === t.id ? { ...item, coverArtUrl: res.coverArtUrl } : item)));
+          setQueue((prev) => prev.map((item) => (item.id === t.id ? { ...item, coverArtUrl: res.coverArtUrl } : item)));
+          if (currentTrack?.id === t.id) {
+            setCurrentTrack((prev) => (prev ? { ...prev, coverArtUrl: res.coverArtUrl } : null));
+          }
+          count++;
+        }
+      } catch {
+        // continue batch
+      }
+    }
+    setToastMessage(`Generated visualizer art for ${count} songs!`);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // --- Attach & Save Synchronized LRC Lyrics ---
+  const handleAttachLrc = async (trackId: string, file: File) => {
+    try {
+      const lrcText = await file.text();
+      await handleSaveLrcText(trackId, lrcText, file.name);
+    } catch (err) {
+      console.error('Failed to attach LRC file:', err);
+      setToastMessage('Could not read .LRC file');
+      setTimeout(() => setToastMessage(null), 3000);
+    }
+  };
+
+  const handleSaveLrcText = async (trackId: string, lrcText: string, fileName?: string) => {
+    const parsed = parseLRC(lrcText);
+    const updatedMetadata = {
+      syncedLyrics: lrcText,
+      lrcContent: lrcText,
+      lrcFileName: fileName || 'custom.lrc',
+      hasSyncedLyrics: parsed.lines.length > 0,
+    };
+
+    await storageService.updateTrackMetadata(trackId, updatedMetadata).catch(() => {});
+
+    setTracks((prev) =>
+      prev.map((t) => (t.id === trackId ? { ...t, ...updatedMetadata } : t))
+    );
+    setQueue((prev) =>
+      prev.map((t) => (t.id === trackId ? { ...t, ...updatedMetadata } : t))
+    );
+    if (currentTrack?.id === trackId) {
+      setCurrentTrack((prev) => (prev ? { ...prev, ...updatedMetadata } : null));
+    }
+
+    setToastMessage(`Saved synchronized LRC lyrics (${parsed.lines.length} lines)`);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleUpdateLrcOffset = async (trackId: string, offset: number) => {
+    await storageService.updateTrackMetadata(trackId, { lrcOffset: offset }).catch(() => {});
+    setTracks((prev) =>
+      prev.map((t) => (t.id === trackId ? { ...t, lrcOffset: offset } : t))
+    );
+    setQueue((prev) =>
+      prev.map((t) => (t.id === trackId ? { ...t, lrcOffset: offset } : t))
+    );
+    if (currentTrack?.id === trackId) {
+      setCurrentTrack((prev) => (prev ? { ...prev, lrcOffset: offset } : null));
+    }
+  };
+
+  // --- Clear / Heal Corrupted Tracks with Gibberish or Legacy Placeholder Names ---
   const handleClearCorruptedTracks = async () => {
-    const corruptedIds = tracks
-      .filter(
-        (t) =>
-          t.title.toLowerCase().includes('english melody') ||
-          t.title.toLowerCase().includes('melody english')
-      )
-      .map((t) => t.id);
+    const corrupted = tracks.filter(
+      (t) =>
+        t.title.toLowerCase().includes('english melody') ||
+        t.title.toLowerCase().includes('melody english') ||
+        hasCjkOrForeignGibberish(t.title) ||
+        hasCjkOrForeignGibberish(t.artist)
+    );
 
-    if (corruptedIds.length === 0) return;
+    if (corrupted.length === 0) return;
 
-    for (const id of corruptedIds) {
-      await storageService.deleteTrack(id).catch(() => {});
+    for (const t of corrupted) {
+      if (t.fileName && !t.fileName.toLowerCase().includes('english_melody')) {
+        const cleaned = cleanFileName(t.fileName);
+        await storageService.updateTrackMetadata(t.id, {
+          title: cleaned.title,
+          artist: cleaned.artist !== 'Unknown Artist' ? cleaned.artist : 'Local Artist',
+          album: 'Device Storage',
+        }).catch(() => {});
+      } else {
+        await storageService.deleteTrack(t.id).catch(() => {});
+      }
     }
 
-    setTracks((prev) => prev.filter((t) => !corruptedIds.includes(t.id)));
-    setQueue((prev) => prev.filter((t) => !corruptedIds.includes(t.id)));
-    if (currentTrack && corruptedIds.includes(currentTrack.id)) {
-      audioEngine.pause();
-      setCurrentTrack(null);
-      setIsPlaying(false);
+    setTracks((prev) =>
+      prev
+        .filter((t) => !t.title.toLowerCase().includes('english melody'))
+        .map((t) => {
+          if (hasCjkOrForeignGibberish(t.title) || hasCjkOrForeignGibberish(t.artist)) {
+            const cleaned = cleanFileName(t.fileName || t.title);
+            return { ...t, title: cleaned.title, artist: cleaned.artist !== 'Unknown Artist' ? cleaned.artist : 'Local Artist' };
+          }
+          return t;
+        })
+    );
+    setQueue((prev) =>
+      prev
+        .filter((t) => !t.title.toLowerCase().includes('english melody'))
+        .map((t) => {
+          if (hasCjkOrForeignGibberish(t.title) || hasCjkOrForeignGibberish(t.artist)) {
+            const cleaned = cleanFileName(t.fileName || t.title);
+            return { ...t, title: cleaned.title, artist: cleaned.artist !== 'Unknown Artist' ? cleaned.artist : 'Local Artist' };
+          }
+          return t;
+        })
+    );
+    if (currentTrack && (hasCjkOrForeignGibberish(currentTrack.title) || currentTrack.title.toLowerCase().includes('english melody'))) {
+      const cleaned = cleanFileName(currentTrack.fileName || currentTrack.title);
+      setCurrentTrack((prev) => (prev ? { ...prev, title: cleaned.title, artist: cleaned.artist !== 'Unknown Artist' ? cleaned.artist : 'Local Artist' } : null));
     }
-    setToastMessage(`Cleared ${corruptedIds.length} placeholder track${corruptedIds.length > 1 ? 's' : ''}`);
+    setToastMessage(`Fixed and cleaned song names!`);
     setTimeout(() => setToastMessage(null), 3000);
   };
 
   // --- Play Track Trigger from Any View ---
   const handlePlayTrack = (track: Track, newQueue?: Track[]) => {
+    hapticsService.trackChange();
     let targetQueue = newQueue || queue;
     let targetIndex = targetQueue.findIndex((t) => t.id === track.id);
     if (targetIndex === -1) {
@@ -583,6 +765,90 @@ export default function App() {
       setToastMessage(`Added ${newTracks.length} song${newTracks.length !== 1 ? 's' : ''} to library`);
       setTimeout(() => setToastMessage(null), 3000);
     }
+  };
+
+  // --- Upload Music Folder from Device Storage ---
+  const handleUploadFolder = async (files: File[], explicitFolderName?: string) => {
+    try {
+      const audioExtensions = ['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'wma'];
+      const audioFiles = files.filter((f) => {
+        const ext = f.name.split('.').pop()?.toLowerCase() || '';
+        return f.type.startsWith('audio/') || audioExtensions.includes(ext);
+      });
+
+      if (audioFiles.length === 0) {
+        setToastMessage('No supported audio files found in selected folder');
+        setTimeout(() => setToastMessage(null), 3000);
+        return;
+      }
+
+      let folderName = explicitFolderName;
+      if (!folderName) {
+        const rel = (audioFiles[0] as any)?.webkitRelativePath || '';
+        if (rel && rel.includes('/')) {
+          folderName = rel.split('/')[0];
+        }
+      }
+      folderName = folderName || 'Uploaded Folder';
+
+      setToastMessage(`Reading ${audioFiles.length} songs from folder "${folderName}"...`);
+
+      const lrcFiles = files.filter((f) => f.name.toLowerCase().endsWith('.lrc'));
+
+      const parsedTracks: Track[] = [];
+      for (const file of audioFiles) {
+        try {
+          // Check if there is a matching .lrc file in the same folder
+          const baseName = file.name.replace(/\.[^/.]+$/, '').toLowerCase().trim();
+          const matchingLrc = lrcFiles.find((lf) => {
+            const lrcBase = lf.name.replace(/\.[^/.]+$/, '').toLowerCase().trim();
+            return lrcBase === baseName || lf.name.toLowerCase().startsWith(baseName);
+          });
+
+          let lrcContent: string | undefined;
+          let lrcFileName: string | undefined;
+          if (matchingLrc) {
+            try {
+              lrcContent = await matchingLrc.text();
+              lrcFileName = matchingLrc.name;
+            } catch {
+              // ignore
+            }
+          }
+
+          const track = await parseAudioFile(file, folderName, lrcContent, lrcFileName);
+          await storageService.saveTrack(track, file);
+          parsedTracks.push(track);
+        } catch (err) {
+          console.warn('Failed to parse file:', file.name, err);
+        }
+      }
+
+      if (parsedTracks.length > 0) {
+        setTracks((prev) => [...parsedTracks, ...prev.filter((t) => !parsedTracks.some((pt) => pt.id === t.id))]);
+        setQueue((prev) => [...parsedTracks, ...prev]);
+        setToastMessage(`Uploaded folder "${folderName}" (${parsedTracks.length} songs)`);
+        setTimeout(() => setToastMessage(null), 3500);
+      }
+    } catch (err) {
+      console.error('Failed to upload folder:', err);
+      setToastMessage('Error reading music folder');
+      setTimeout(() => setToastMessage(null), 3000);
+    }
+  };
+
+  const handleDeleteFolder = async (folderName: string) => {
+    const toDelete = tracks.filter((t) => t.folderName === folderName);
+    for (const t of toDelete) {
+      await storageService.deleteTrack(t.id).catch(() => {});
+    }
+    setTracks((prev) => prev.filter((t) => t.folderName !== folderName));
+    setQueue((prev) => prev.filter((t) => t.folderName !== folderName));
+    if (currentTrack?.folderName === folderName) {
+      handleNextTrack();
+    }
+    setToastMessage(`Removed folder "${folderName}" from library`);
+    setTimeout(() => setToastMessage(null), 3000);
   };
 
   const handleDeleteTrack = async (id: string) => {
@@ -742,6 +1008,10 @@ export default function App() {
                   onPickAndPlayFile={handlePickAndPlayFile}
                   onRenameTrack={handleRenameTrack}
                   onClearCorruptedTracks={handleClearCorruptedTracks}
+                  onUploadFolder={handleUploadFolder}
+                  onDeleteFolder={handleDeleteFolder}
+                  onGenerateAlbumArt={handleGenerateAlbumArt}
+                  onBatchGenerateAlbumArt={handleBatchGenerateAlbumArt}
                 />
               )}
 
@@ -922,17 +1192,22 @@ export default function App() {
         }}
         bassBoostEnabled={bassBoostEnabled}
         onToggleBassBoost={handleToggleBassBoost}
+        onGenerateAlbumArt={handleGenerateAlbumArt}
+        onAttachLrc={handleAttachLrc}
+        onSaveLrcText={handleSaveLrcText}
+        onUpdateOffset={handleUpdateLrcOffset}
       />
 
       {/* 5-Band Equalizer Modal with Rock, Pop, Classical, Jazz & Toggleable Bass Boost */}
       <EqualizerModal
         isOpen={isEQOpen}
         onClose={() => setIsEQOpen(false)}
-        onSave={(presetName, gains, bass, bassEnabled, crossfade, gapless) => {
+        onSave={(presetName, gains, bass, bassEnabled, crossfade, gapless, haptics) => {
           setBassBoostEnabled(bassEnabled);
           setBassBoostLevel(bass);
           if (crossfade !== undefined) setCrossfadeDuration(crossfade);
           if (gapless !== undefined) setGaplessEnabled(gapless);
+          if (haptics !== undefined) hapticsService.setEnabled(haptics);
           storageService.saveSettings({
             volume,
             isMuted,
@@ -944,8 +1219,10 @@ export default function App() {
             bassBoostEnabled: bassEnabled,
             crossfadeDuration: crossfade ?? crossfadeDuration,
             gaplessEnabled: gapless ?? gaplessEnabled,
+            hapticsEnabled: haptics ?? hapticsService.isEnabled(),
           }).catch(() => {});
         }}
+
       />
 
       {/* Local File & Folder Scanner Modal */}

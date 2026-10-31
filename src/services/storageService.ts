@@ -1,5 +1,5 @@
 import { Playlist, Track, EqualizerPreset } from '../types/audio';
-import { cleanFileName } from '../utils/id3Parser';
+import { cleanFileName, hasCjkOrForeignGibberish } from '../utils/id3Parser';
 
 const DB_NAME = 'kaGO_PIaY_Audio_DB';
 const DB_VERSION = 1;
@@ -21,7 +21,9 @@ export interface AppSettings {
   bassBoostEnabled?: boolean;
   crossfadeDuration?: number;
   gaplessEnabled?: boolean;
+  hapticsEnabled?: boolean;
 }
+
 
 class StorageService {
   private dbPromise: Promise<IDBDatabase> | null = null;
@@ -102,12 +104,14 @@ class StorageService {
           let album = r.metadata?.album || '';
           const fileName = r.metadata?.fileName || (r.audioBlob as any)?.name || '';
 
-          // If this track was corrupted with "English Melody" from earlier code:
+          // If this track was corrupted with "English Melody" or CJK/mojibake characters:
           const isCorrupted =
             !title ||
             title.toLowerCase().includes('english melody') ||
             title.toLowerCase().includes('melody english') ||
-            title.toLowerCase() === 'audio song';
+            title.toLowerCase() === 'audio song' ||
+            hasCjkOrForeignGibberish(title) ||
+            hasCjkOrForeignGibberish(artist);
 
           if (isCorrupted) {
             if (
@@ -124,10 +128,20 @@ class StorageService {
             }
           }
 
-          if (artist.toLowerCase().includes('english melody') || artist.toLowerCase().includes('melody english')) {
+          if (
+            !artist ||
+            artist.toLowerCase().includes('english melody') ||
+            artist.toLowerCase().includes('melody english') ||
+            hasCjkOrForeignGibberish(artist)
+          ) {
             artist = 'Unknown Artist';
           }
-          if (album.toLowerCase().includes('english melody') || album.toLowerCase().includes('melody english')) {
+          if (
+            !album ||
+            album.toLowerCase().includes('english melody') ||
+            album.toLowerCase().includes('melody english') ||
+            hasCjkOrForeignGibberish(album)
+          ) {
             album = 'Device Storage';
           }
 

@@ -1,6 +1,5 @@
 import React, { useRef } from 'react';
 import { Search, HardDrive, BookOpen, Music2, Sliders, FileAudio, Youtube } from 'lucide-react';
-import { PWAInstallButton } from './PWAInstallButton';
 
 interface HeaderProps {
   searchQuery: string;
@@ -135,9 +134,6 @@ export const Header: React.FC<HeaderProps> = ({
           <BookOpen className="w-3.5 h-3.5 opacity-60" />
           <span className="label !opacity-100">Architecture</span>
         </button>
-
-        {/* Install App Button */}
-        <PWAInstallButton compact />
       </div>
     </header>
   );

@@ -27,7 +27,7 @@ export const LocalFileScannerModal: React.FC<LocalFileScannerModalProps> = ({
 
   if (!isOpen) return null;
 
-  const processFiles = async (fileList: FileList | File[]) => {
+  const processFiles = async (fileList: FileList | File[], explicitFolderName?: string) => {
     const audioExtensions = ['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'wma'];
     const files = Array.from(fileList).filter((f) => {
       const ext = f.name.split('.').pop()?.toLowerCase() || '';
@@ -39,16 +39,25 @@ export const LocalFileScannerModal: React.FC<LocalFileScannerModalProps> = ({
       return;
     }
 
+    // Auto-detect folder name if not explicitly provided
+    let folderName = explicitFolderName;
+    if (!folderName) {
+      const rel = (files[0] as any)?.webkitRelativePath || '';
+      if (rel && rel.includes('/')) {
+        folderName = rel.split('/')[0];
+      }
+    }
+
     setIsScanning(true);
-    setStatusMessage(`Reading ${files.length} audio file${files.length > 1 ? 's' : ''}...`);
+    setStatusMessage(`Reading ${files.length} audio file${files.length > 1 ? 's' : ''}${folderName ? ` from "${folderName}"` : ''}...`);
 
     const newScanned: { track: Track; file: File }[] = [];
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      setStatusMessage(`Extracting ID3 tags: ${file.name}`);
+      setStatusMessage(`Reading: ${file.name}`);
       try {
-        const track = await parseAudioFile(file);
+        const track = await parseAudioFile(file, folderName);
         newScanned.push({ track, file });
       } catch (err) {
         console.error('Failed to parse file:', file.name, err);
@@ -93,7 +102,7 @@ export const LocalFileScannerModal: React.FC<LocalFileScannerModalProps> = ({
               }
             }
           }
-          await processFiles(foundFiles);
+          await processFiles(foundFiles, dirHandle.name);
         } catch (err: unknown) {
           if ((err as Error)?.name !== 'AbortError') {
             folderInputRef.current?.click();
@@ -167,7 +176,10 @@ export const LocalFileScannerModal: React.FC<LocalFileScannerModalProps> = ({
           className="hidden"
           onChange={(e) => {
             if (e.target.files && e.target.files.length > 0) {
-              processFiles(e.target.files);
+              const files = Array.from(e.target.files);
+              const rel = (files[0] as any)?.webkitRelativePath || '';
+              const detectedFolder = rel.includes('/') ? rel.split('/')[0] : undefined;
+              processFiles(files, detectedFolder);
             }
           }}
         />

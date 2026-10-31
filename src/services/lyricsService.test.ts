@@ -41,7 +41,7 @@ test('getActiveLyricIndex accurately locates active line with timing offsets', (
   ];
 
   // Before first line
-  assert.equal(getActiveLyricIndex(lines, 2.0), 0);
+  assert.equal(getActiveLyricIndex(lines, 2.0), -1);
 
   // Exactly at line 1
   assert.equal(getActiveLyricIndex(lines, 5.0), 0);

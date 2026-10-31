@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
+import { generateProceduralVisualizerArt } from './src/utils/visualizerArtGenerator.ts';
 
 dotenv.config();
 
@@ -343,6 +344,118 @@ app.get('/api/lyrics', async (req, res) => {
   } catch (error: any) {
     console.error('Lyrics API endpoint failure:', error);
     return res.status(500).json({ error: error?.message || 'Failed to fetch lyrics' });
+  }
+});
+
+/**
+ * POST /api/album-art
+ * Analyzes track title and artist using the Gemini API to generate
+ * a unique placeholder visualizer image for the track's album cover.
+ * Also checks official album covers via iTunes Search API.
+ */
+app.post('/api/album-art', async (req, res) => {
+  try {
+    const { title, artist, album, preferAi } = req.body;
+
+    if (!title || typeof title !== 'string') {
+      return res.status(400).json({ error: 'Song title is required' });
+    }
+
+    const cleanArtist =
+      artist &&
+      artist.toLowerCase() !== 'unknown artist' &&
+      artist.toLowerCase() !== 'local artist'
+        ? artist
+        : '';
+
+    // 1. If not strictly preferAi, attempt official album cover search via iTunes Search API
+    if (!preferAi) {
+      try {
+        const queryTerm = cleanArtist ? `${title} ${cleanArtist}` : title;
+        const itunesUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(queryTerm)}&entity=song&limit=1`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3500);
+
+        const itunesRes = await fetch(itunesUrl, { signal: controller.signal }).catch(() => null);
+        clearTimeout(timeout);
+
+        if (itunesRes && itunesRes.ok) {
+          const data = await itunesRes.json().catch(() => null);
+          if (data && data.results && data.results.length > 0) {
+            const hit = data.results[0];
+            const originalArt = hit.artworkUrl100 || hit.artworkUrl60;
+            if (originalArt) {
+              const highResArt = originalArt.replace(/\/\d+x\d+bb\.jpg/i, '/600x600bb.jpg');
+              return res.json({
+                success: true,
+                coverArtUrl: highResArt,
+                source: 'itunes',
+                title: hit.trackName || title,
+                artist: hit.artistName || artist,
+              });
+            }
+          }
+        }
+      } catch (itunesErr) {
+        console.warn('iTunes album art lookup skipped:', itunesErr);
+      }
+    }
+
+    // 2. Gemini API: Analyze song title & artist and generate a unique visualizer SVG image
+    const ai = getGenAI();
+    if (ai) {
+      try {
+        const prompt = `You are a high-end graphic designer for kaGO.PIaY, an ultra-modern dark red and black music streaming app.
+Analyze the song title "${title}" by artist "${artist || 'Unknown Artist'}" (album: "${album || 'Single'}").
+1. Infer its emotional mood, sonic energy, and musical genre.
+2. Generate a unique, high-resolution visualizer album cover in SVG format (viewBox="0 0 600 600", width="600", height="600").
+Design guidelines:
+- Theme: Signature obsidian black (#0c0c0e, #16161a) and glowing neon red/crimson accents (#ff3e3e, #f43f5e, #991b1b, #fda4af).
+- Visualizer elements: Prominent music visualizer graphics (e.g. glowing radial frequency spectrum spikes, oscillating soundwaves, concentric vinyl groove pulses, or neon equalizer bars).
+- Typography: Display the song title "${title.slice(0, 28)}" and artist "${(artist || 'Unknown Artist').slice(0, 24)}" in elegant, modern typography with high contrast.
+- Filters: Include <defs> with glowing SVG filters (<filter id="glow">).
+- Output: Return ONLY raw, valid SVG markup starting with <svg and ending with </svg>. No introductory text, no markdown explanation.`;
+
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: prompt,
+        });
+
+        const text = response.text || '';
+        const svgMatch = text.match(/<svg[\s\S]*?<\/svg>/i);
+        if (svgMatch) {
+          const svgMarkup = svgMatch[0];
+          const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svgMarkup)}`;
+          return res.json({
+            success: true,
+            coverArtUrl: dataUrl,
+            source: 'gemini-api',
+            title,
+            artist,
+          });
+        }
+      } catch (geminiErr: any) {
+        console.warn('Gemini album art generation failed, using procedural visualizer:', geminiErr?.message);
+      }
+    }
+
+    // 3. Guaranteed high-fidelity procedural visualizer image fallback
+    const fallbackSvgDataUrl = generateProceduralVisualizerArt({
+      title,
+      artist: artist || 'Unknown Artist',
+      genre: album || 'Offline Audio',
+    });
+
+    return res.json({
+      success: true,
+      coverArtUrl: fallbackSvgDataUrl,
+      source: 'procedural-visualizer',
+      title,
+      artist,
+    });
+  } catch (error: any) {
+    console.error('Album art generation endpoint error:', error);
+    return res.status(500).json({ error: error?.message || 'Failed to generate album art' });
   }
 });
 

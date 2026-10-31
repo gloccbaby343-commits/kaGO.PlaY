@@ -1,13 +1,42 @@
 import { Track } from '../types/audio';
 import { generateCoverGradient } from './formatters';
 import { sanitizeTrackToEnglish, toEnglishOnly } from './englishSanitizer';
+import { generateProceduralVisualizerArt } from './visualizerArtGenerator';
+
+/**
+ * Detects if a string contains Chinese, Japanese, Korean (CJK) characters
+ * or unprintable mojibake replacement characters produced by encoding mismatch.
+ */
+export function hasCjkOrForeignGibberish(text?: string): boolean {
+  if (!text || typeof text !== 'string') return false;
+  // CJK Unified Ideographs, Hiragana, Katakana, Hangul, Bopomofo, CJK symbols & punctuation
+  const cjkRegex = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af\uff00-\uffef]/;
+  // Replacement character or control character mojibake
+  const mojibakeRegex = /[\uFFFD\u0080-\u009F]/;
+  return cjkRegex.test(text) || mojibakeRegex.test(text);
+}
 
 /**
  * Extracts metadata and duration from an uploaded audio File
  */
-export async function parseAudioFile(file: File): Promise<Track> {
+export async function parseAudioFile(
+  file: File,
+  explicitFolderName?: string,
+  lrcContent?: string,
+  lrcFileName?: string
+): Promise<Track> {
   const url = URL.createObjectURL(file);
   const format = detectFormat(file);
+
+  // Extract folder name from webkitRelativePath or explicit parameter
+  let folderName = explicitFolderName;
+  const relPath = (file as any).webkitRelativePath || '';
+  if (!folderName && relPath) {
+    const parts = relPath.split('/');
+    if (parts.length > 1) {
+      folderName = parts[0];
+    }
+  }
 
   // Extract duration using lightweight hidden audio element
   const duration = await getAudioDuration(url);
@@ -17,19 +46,38 @@ export async function parseAudioFile(file: File): Promise<Track> {
   let artist = '';
   let album = '';
   let coverArtUrl: string | undefined;
+  let embeddedLyrics: string | undefined;
 
   try {
     const buffer = await file.slice(0, 512 * 1024).arrayBuffer(); // read first 512KB for ID3 header
     const tags = parseID3v2(buffer);
     if (tags) {
-      if (tags.title && tags.title.trim() && !tags.title.toLowerCase().includes('english melody')) {
+      if (
+        tags.title &&
+        tags.title.trim() &&
+        !tags.title.toLowerCase().includes('english melody') &&
+        !hasCjkOrForeignGibberish(tags.title)
+      ) {
         title = tags.title.trim();
       }
-      if (tags.artist && tags.artist.trim() && !tags.artist.toLowerCase().includes('english melody')) {
+      if (
+        tags.artist &&
+        tags.artist.trim() &&
+        !tags.artist.toLowerCase().includes('english melody') &&
+        !hasCjkOrForeignGibberish(tags.artist)
+      ) {
         artist = tags.artist.trim();
       }
-      if (tags.album && tags.album.trim() && !tags.album.toLowerCase().includes('english melody')) {
+      if (
+        tags.album &&
+        tags.album.trim() &&
+        !tags.album.toLowerCase().includes('english melody') &&
+        !hasCjkOrForeignGibberish(tags.album)
+      ) {
         album = tags.album.trim();
+      }
+      if (tags.lyrics && tags.lyrics.trim()) {
+        embeddedLyrics = tags.lyrics.trim();
       }
       if (tags.picture) {
         const picBlob = new Blob([tags.picture.data as any], { type: tags.picture.mime });
@@ -40,34 +88,52 @@ export async function parseAudioFile(file: File): Promise<Track> {
     console.warn('ID3 parsing skipped or failed for file:', file.name, err);
   }
 
-  // Fallback to intelligent filename cleaning if tags are empty or placeholder
-  if (!title || title.toLowerCase().includes('english melody')) {
-    const cleaned = cleanFileName(file.name);
-    title = cleaned.title;
-    if (!artist || artist.toLowerCase().includes('english melody')) {
-      artist = cleaned.artist;
-    }
+  // Ground truth clean name from device storage filename
+  const fromFile = cleanFileName(file.name);
+
+  // If title was missing, placeholder, or corrupted with CJK/mojibake, use clean storage filename
+  if (!title || hasCjkOrForeignGibberish(title) || title.toLowerCase().includes('english melody')) {
+    title = fromFile.title;
   }
-  if (!artist || artist.toLowerCase().includes('english melody')) artist = 'Unknown Artist';
-  if (!album || album.toLowerCase().includes('english melody')) album = 'Device Storage';
+  if (!artist || hasCjkOrForeignGibberish(artist) || artist.toLowerCase().includes('english melody')) {
+    artist = fromFile.artist !== 'Unknown Artist' ? fromFile.artist : 'Unknown Artist';
+  }
+  if (!album || hasCjkOrForeignGibberish(album) || album.toLowerCase().includes('english melody')) {
+    album = folderName || 'Device Storage';
+  }
 
   const trackId = `track_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
+  const finalTitle = title || fromFile.title || file.name.replace(/\.[^/.]+$/, '');
+  const finalArtist = artist || 'Unknown Artist';
+
+  // If no embedded cover art found, generate a unique visualizer placeholder image
+  const finalCoverArtUrl = coverArtUrl || generateProceduralVisualizerArt({
+    title: finalTitle,
+    artist: finalArtist,
+    genre: album || 'Device Storage',
+  });
+
   const rawTrack: Track = {
     id: trackId,
-    title: title || file.name.replace(/\.[^/.]+$/, ''),
-    artist: artist || 'Unknown Artist',
+    title: finalTitle,
+    artist: finalArtist,
     album: album || 'Device Storage',
     duration: Math.round(duration || 0),
     url,
     format,
-    coverArtUrl,
-    coverGradient: generateCoverGradient(title + artist),
+    coverArtUrl: finalCoverArtUrl,
+    coverGradient: generateCoverGradient(finalTitle + finalArtist),
     fileSize: file.size,
     addedAt: Date.now(),
     isFavorite: false,
     isCustom: true,
     fileName: file.name,
+    folderName: folderName ? folderName.trim() : undefined,
+    syncedLyrics: lrcContent || embeddedLyrics,
+    lrcContent: lrcContent || embeddedLyrics,
+    lrcFileName: lrcFileName,
+    hasSyncedLyrics: !!(lrcContent || embeddedLyrics),
   };
 
   return rawTrack;
@@ -158,6 +224,7 @@ interface ID3Result {
   artist?: string;
   album?: string;
   picture?: { mime: string; data: Uint8Array };
+  lyrics?: string;
 }
 
 function parseID3v2(buffer: ArrayBuffer): ID3Result | null {
@@ -218,6 +285,16 @@ function parseID3v2(buffer: ArrayBuffer): ID3Result | null {
       } catch {
         // ignore malformed picture
       }
+    } else if (frameId === 'USLT') {
+      // Unsynchronized lyric/text transcription
+      try {
+        if (frameData.length > 5) {
+          const text = decodeTextFrame(frameData.subarray(4));
+          if (text) result.lyrics = text;
+        }
+      } catch {
+        // ignore
+      }
     }
 
     offset += 10 + frameSize;
@@ -238,7 +315,20 @@ function decodeTextFrame(data: Uint8Array): string {
       raw = new TextDecoder('windows-1252').decode(payload);
     } else if (encoding === 1) {
       // UTF-16 with BOM
-      raw = new TextDecoder('utf-16').decode(payload);
+      const hasBOM =
+        payload.length >= 2 &&
+        ((payload[0] === 0xff && payload[1] === 0xfe) || (payload[0] === 0xfe && payload[1] === 0xff));
+
+      if (hasBOM) {
+        raw = new TextDecoder('utf-16').decode(payload);
+      } else {
+        // Tag writer marked encoding=1 but wrote UTF-8 or Latin-1 without BOM
+        try {
+          raw = new TextDecoder('utf-8', { fatal: true }).decode(payload);
+        } catch {
+          raw = new TextDecoder('windows-1252').decode(payload);
+        }
+      }
     } else if (encoding === 2) {
       // UTF-16BE without BOM
       raw = new TextDecoder('utf-16be').decode(payload);
@@ -247,25 +337,28 @@ function decodeTextFrame(data: Uint8Array): string {
       raw = new TextDecoder('utf-8').decode(payload);
     }
   } catch {
-    try {
-      raw = new TextDecoder('utf-8').decode(payload);
-    } catch {
-      raw = '';
-    }
+    raw = '';
   }
 
   // Remove null characters and trim
   raw = raw.replace(/\0/g, '').trim();
 
-  // If decoding resulted in replacement characters (\uFFFD), try windows-1252 as fallback
-  if (raw.includes('\uFFFD')) {
+  // If decoding resulted in CJK characters (mojibake) from misread byte pairs, fall back to UTF-8/Latin1:
+  if (hasCjkOrForeignGibberish(raw)) {
     try {
-      const fallback = new TextDecoder('windows-1252').decode(payload).replace(/\0/g, '').trim();
-      if (!fallback.includes('\uFFFD') && fallback.length > 0) {
-        raw = fallback;
+      const utf8 = new TextDecoder('utf-8').decode(payload).replace(/\0/g, '').trim();
+      if (!hasCjkOrForeignGibberish(utf8) && utf8.length > 0) {
+        raw = utf8;
+      } else {
+        const latin = new TextDecoder('windows-1252').decode(payload).replace(/\0/g, '').trim();
+        if (!hasCjkOrForeignGibberish(latin) && latin.length > 0) {
+          raw = latin;
+        } else {
+          return ''; // Return empty string so caller uses clean storage filename!
+        }
       }
     } catch {
-      // keep raw
+      return '';
     }
   }
 

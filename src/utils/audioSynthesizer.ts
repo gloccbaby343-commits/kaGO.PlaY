@@ -1,5 +1,6 @@
 import { Track } from '../types/audio';
 import { generateCoverGradient } from './formatters';
+import { generateProceduralVisualizerArt } from './visualizerArtGenerator';
 
 /**
  * Converts an AudioBuffer to an audio/wav Blob
@@ -114,6 +115,19 @@ export async function generateDemoTracks(): Promise<Track[]> {
       addedAt: Date.now() - 3600000 * 24,
       isFavorite: true,
       fileName: 'AuraStudio_NeonHorizon.wav',
+      folderName: 'AuraWave Master Tracks',
+      syncedLyrics: `[ti:Neon Horizon]
+[ar:Aura Studio]
+[al:Retrowave Nights]
+[by:kaGO.PIaY Audio Engine]
+[00:00.80]♪ Neon glow across the midnight grid ♪
+[00:04.20]Driving through the digital rain
+[00:08.10]Synthesizers pulse against the dark
+[00:12.40]Electric dreams racing in my veins
+[00:16.50]Feel the frequencies rise up
+[00:20.20]Until the morning horizon arrives`,
+      lrcFileName: 'AuraStudio_NeonHorizon.lrc',
+      hasSyncedLyrics: true,
     },
     {
       id: 'demo-2-midnight-rain',
@@ -123,12 +137,29 @@ export async function generateDemoTracks(): Promise<Track[]> {
       duration: 24,
       url: url2,
       format: 'wav',
+      coverArtUrl: generateProceduralVisualizerArt({
+        title: 'Midnight Rain',
+        artist: 'Serene Sound',
+        genre: 'Late Night Coffee',
+        style: 'vinyl-pulse',
+      }),
       coverGradient: generateCoverGradient('Midnight Rain'),
       fileSize: blob2.size,
       bitrate: 705,
       addedAt: Date.now() - 3600000 * 12,
       isFavorite: false,
       fileName: 'SereneSound_MidnightRain.wav',
+      folderName: 'AuraWave Master Tracks',
+      syncedLyrics: `[ti:Midnight Rain]
+[ar:Serene Sound]
+[al:Late Night Coffee]
+[00:01.00]♪ Drops falling softly against the glass ♪
+[00:05.50]Warm coffee on a quiet rainy night
+[00:10.20]Lo-fi vinyl crackle in the room
+[00:15.00]Let the calm melody wash the world away
+[00:19.80]Peaceful echoes in the midnight rain`,
+      lrcFileName: 'SereneSound_MidnightRain.lrc',
+      hasSyncedLyrics: true,
     },
     {
       id: 'demo-3-solar-wind',
@@ -138,12 +169,19 @@ export async function generateDemoTracks(): Promise<Track[]> {
       duration: 28,
       url: url3,
       format: 'wav',
+      coverArtUrl: generateProceduralVisualizerArt({
+        title: 'Solar Wind',
+        artist: 'Nebula Drift',
+        genre: 'Cosmic Horizons',
+        style: 'spectrum-radial',
+      }),
       coverGradient: generateCoverGradient('Solar Wind'),
       fileSize: blob3.size,
       bitrate: 705,
       addedAt: Date.now() - 3600000 * 6,
       isFavorite: true,
       fileName: 'NebulaDrift_SolarWind.wav',
+      folderName: 'AuraWave Master Tracks',
     },
     {
       id: 'demo-4-cyber-pulse',
@@ -153,12 +191,30 @@ export async function generateDemoTracks(): Promise<Track[]> {
       duration: 24,
       url: url4,
       format: 'wav',
+      coverArtUrl: generateProceduralVisualizerArt({
+        title: 'Cyber Pulse',
+        artist: 'HyperDrive',
+        genre: 'Future Core',
+        style: 'cyber-bars',
+      }),
       coverGradient: generateCoverGradient('Cyber Pulse'),
       fileSize: blob4.size,
       bitrate: 705,
       addedAt: Date.now() - 3600000 * 2,
       isFavorite: false,
       fileName: 'HyperDrive_CyberPulse.wav',
+      folderName: 'AuraWave Master Tracks',
+      syncedLyrics: `[ti:Cyber Pulse]
+[ar:HyperDrive]
+[al:Future Core]
+[00:00.60]♪ System boot: Cybernetic pulse online ♪
+[00:04.00]Heavy electro bass drops right now
+[00:08.20]Neon lasers cutting through the fog
+[00:12.60]Overdrive circuits at maximum speed
+[00:16.90]HyperDrive velocity taking control
+[00:20.50]Feel the subterranean bass resonance`,
+      lrcFileName: 'HyperDrive_CyberPulse.lrc',
+      hasSyncedLyrics: true,
     },
   ];
 }
