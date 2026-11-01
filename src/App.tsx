@@ -45,6 +45,7 @@ export default function App() {
   // Active View Navigation
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
+  const [youtubeSearchQuery, setYoutubeSearchQuery] = useState('');
 
   // Playback State
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
@@ -948,9 +949,11 @@ export default function App() {
           onPickAndPlayFile={handlePickAndPlayFile}
           bassBoostEnabled={bassBoostEnabled}
           onSearchYouTube={(query) => {
+            setYoutubeSearchQuery(query);
             setActiveTab('youtube');
           }}
         />
+
 
         {/* Offline indicator banner */}
         {!isOnline && (
@@ -1076,6 +1079,8 @@ export default function App() {
 
               {activeTab === 'youtube' && (
                 <YouTubeStreamView
+                  initialQuery={youtubeSearchQuery}
+                  onClearInitialQuery={() => setYoutubeSearchQuery('')}
                   currentTrack={currentTrack}
                   isPlaying={isPlaying}
                   onPlayTrack={handlePlayTrack}
@@ -1089,6 +1094,7 @@ export default function App() {
                   favoriteIds={favoriteIds}
                 />
               )}
+
 
               {activeTab === 'architecture' && (
                 <div className="max-w-4xl mx-auto">

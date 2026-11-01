@@ -168,7 +168,23 @@ export class YouTubePlayerService {
     }
 
     try {
-      if (autoPlay) {
+      if (videoId.startsWith('search:')) {
+        const queryTerm = decodeURIComponent(videoId.replace('search:', ''));
+        if (typeof this.player.loadPlaylist === 'function') {
+          this.player.loadPlaylist({
+            listType: 'search',
+            list: queryTerm,
+            index: 0,
+            startSeconds: 0,
+          });
+          if (autoPlay) this.player.playVideo();
+        } else {
+          const iframe = this.player.getIframe?.();
+          if (iframe) {
+            iframe.src = `https://www.youtube-nocookie.com/embed?listType=search&list=${encodeURIComponent(queryTerm)}&autoplay=1&playsinline=1&enablejsapi=1&rel=0`;
+          }
+        }
+      } else if (autoPlay) {
         this.player.loadVideoById({
           videoId,
           startSeconds: 0,
@@ -184,6 +200,7 @@ export class YouTubePlayerService {
       console.warn('Error loading YouTube video:', err);
     }
   }
+
 
   public stop(): void {
     this.stopTimeUpdates();

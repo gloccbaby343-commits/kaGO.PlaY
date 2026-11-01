@@ -217,12 +217,19 @@ export const FullscreenPlayer: React.FC<FullscreenPlayerProps> = ({
             <div className="relative aspect-video w-full rounded-2xl overflow-hidden shadow-2xl border-2 border-[#ff3e3e]/40 bg-black">
               <iframe
                 id="yt-fullscreen-iframe"
-                src={`https://www.youtube-nocookie.com/embed/${currentTrack.youtubeId}?autoplay=1&playsinline=1&enablejsapi=1&rel=0&modestbranding=1`}
+                src={
+                  currentTrack.youtubeId?.startsWith('search:')
+                    ? `https://www.youtube-nocookie.com/embed?listType=search&list=${encodeURIComponent(
+                        decodeURIComponent(currentTrack.youtubeId.replace('search:', ''))
+                      )}&autoplay=1&playsinline=1&enablejsapi=1&rel=0&modestbranding=1`
+                    : `https://www.youtube-nocookie.com/embed/${currentTrack.youtubeId}?autoplay=1&playsinline=1&enablejsapi=1&rel=0&modestbranding=1`
+                }
                 title={currentTrack.title}
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowFullScreen
                 className="w-full h-full border-0"
               />
+
             </div>
             <div className="flex items-center gap-2 mt-3">
               <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-sm bg-[#ff3e3e]/20 text-[#ff3e3e] border border-[#ff3e3e]/40 font-bold uppercase tracking-wider">

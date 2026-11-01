@@ -44,12 +44,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <aside className="w-[280px] bg-black/45 backdrop-blur-2xl border-r border-white/[0.08] shadow-[4px_0_30px_rgba(0,0,0,0.3)] hidden lg:flex flex-col h-screen shrink-0 p-6 justify-between select-none relative z-20">
       <div className="top">
         {/* Brand Header */}
-        <div className="brand mb-8">
-          <div className="label mb-1 text-[10px] tracking-widest text-[#ff3e3e] font-mono">[ SYSTEM.V1 ]</div>
-          <h1 className="font-syne font-extrabold text-2xl tracking-tighter text-[#f2efeb]">
-            kaGO.PIaY
-          </h1>
-          <div className="label opacity-50 text-[11px]">Offline Audio Engine</div>
+        <div className="brand mb-8 flex items-center gap-3">
+          <img
+            src="/assets/aistudio/kaGO_PLay_Logo_6adaa8a1.png"
+            alt="kaGO.PIaY App Logo"
+            className="w-11 h-11 rounded-2xl object-cover border border-white/10 shadow-[0_0_20px_rgba(255,62,62,0.35)] shrink-0"
+          />
+          <div>
+            <div className="label mb-0.5 text-[10px] tracking-widest text-[#ff3e3e] font-mono">[ SYSTEM.V1 ]</div>
+            <h1 className="font-syne font-extrabold text-xl tracking-tight text-[#f2efeb] leading-tight">
+              kaGO.PIaY
+            </h1>
+            <div className="label opacity-50 text-[11px]">Offline Audio Engine</div>
+          </div>
         </div>
 
         {/* Navigation Menu */}

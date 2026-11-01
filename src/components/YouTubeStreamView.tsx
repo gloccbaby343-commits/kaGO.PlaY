@@ -13,6 +13,7 @@ import {
   Loader2,
   Check,
   Link2,
+  X,
 } from 'lucide-react';
 import { Track, YouTubeSearchResult } from '../types/audio';
 import { generateCoverGradient } from '../utils/formatters';
@@ -23,6 +24,8 @@ import {
 } from '../data/youtubeCuratedTracks';
 
 interface YouTubeStreamViewProps {
+  initialQuery?: string;
+  onClearInitialQuery?: () => void;
   currentTrack: Track | null;
   isPlaying: boolean;
   onPlayTrack: (track: Track, newQueue?: Track[]) => void;
@@ -45,6 +48,8 @@ const QUICK_TAGS = [
 ];
 
 export const YouTubeStreamView: React.FC<YouTubeStreamViewProps> = ({
+  initialQuery,
+  onClearInitialQuery,
   currentTrack,
   isPlaying,
   onPlayTrack,
@@ -67,10 +72,12 @@ export const YouTubeStreamView: React.FC<YouTubeStreamViewProps> = ({
   const [linkError, setLinkError] = useState<string | null>(null);
 
   const fetchYouTubeTracks = async (query: string) => {
+    if (!query || !query.trim()) return;
+    const cleanQuery = query.trim();
     setIsLoading(true);
 
     // 1. Check if user typed a direct YouTube URL or 11-char Video ID
-    const directVideoId = extractYouTubeId(query);
+    const directVideoId = extractYouTubeId(cleanQuery);
     if (directVideoId) {
       try {
         const noembedResp = await fetch(
@@ -87,7 +94,7 @@ export const YouTubeStreamView: React.FC<YouTubeStreamViewProps> = ({
           thumbnail: data.thumbnail_url || `https://i.ytimg.com/vi/${directVideoId}/hqdefault.jpg`,
           views: 'Direct Link',
         };
-        const fallbacks = searchCuratedYouTubeTracks(query).filter((t) => t.id !== directVideoId);
+        const fallbacks = searchCuratedYouTubeTracks(cleanQuery).filter((t) => t.id !== directVideoId);
         setResults([customTrack, ...fallbacks]);
         setIsLoading(false);
         return;
@@ -96,9 +103,16 @@ export const YouTubeStreamView: React.FC<YouTubeStreamViewProps> = ({
       }
     }
 
-    // 2. Try relative server API (works when connected to local/remote server)
+    // 2. Query server API (local with fast remote fallback)
     try {
-      const resp = await fetch(`/api/youtube/search?q=${encodeURIComponent(query)}`);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 4500);
+      const isHttp = typeof window !== 'undefined' && window.location.protocol.startsWith('http');
+      const baseUrl = isHttp ? '' : 'https://ais-dev-wpkdjvqx72r6yimfokvceh-468400850117.europe-west2.run.app';
+      const resp = await fetch(`${baseUrl}/api/youtube/search?q=${encodeURIComponent(cleanQuery)}`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
       if (resp.ok) {
         const data = await resp.json();
         if (data && Array.isArray(data.results) && data.results.length > 0) {
@@ -108,12 +122,78 @@ export const YouTubeStreamView: React.FC<YouTubeStreamViewProps> = ({
         }
       }
     } catch {
-      // In standalone mobile APK, local backend may be unreachable
+      // If relative failed, attempt remote deployment endpoint
+      if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 4000);
+          const remoteUrl = `https://ais-dev-wpkdjvqx72r6yimfokvceh-468400850117.europe-west2.run.app/api/youtube/search?q=${encodeURIComponent(cleanQuery)}`;
+          const resp = await fetch(remoteUrl, { signal: controller.signal });
+          clearTimeout(timer);
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data && Array.isArray(data.results) && data.results.length > 0) {
+              setResults(data.results);
+              setIsLoading(false);
+              return;
+            }
+          }
+        } catch {
+          // Fall through to client fallbacks
+        }
+      }
     }
 
-    // 3. Fallback to rich curated tracks catalogue (offline & standalone APK proof)
-    const fallbackList = searchCuratedYouTubeTracks(query);
-    setResults(fallbackList);
+
+    // 3. Client-side CORS iTunes search fallback
+    try {
+      const itunesUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(cleanQuery)}&entity=song&limit=15`;
+      const itunesResp = await fetch(itunesUrl);
+      if (itunesResp.ok) {
+        const itunesData = await itunesResp.json();
+        if (Array.isArray(itunesData.results) && itunesData.results.length > 0) {
+          const songs: YouTubeSearchResult[] = itunesData.results.map((song: any) => {
+            const fullTitle = `${song.artistName} - ${song.trackName}`;
+            const durationSec = Math.round((song.trackTimeMillis || 210000) / 1000);
+            const mins = Math.floor(durationSec / 60);
+            const secs = durationSec % 60;
+            const durationStr = `${mins}:${secs.toString().padStart(2, '0')}`;
+            const highResArtwork = (song.artworkUrl100 || '').replace(/\/\d+x\d+bb\.jpg/i, '/600x600bb.jpg');
+
+            return {
+              id: `search:${encodeURIComponent(fullTitle)}`,
+              title: song.trackName || cleanQuery,
+              fullTitle,
+              artist: song.artistName || 'Artist',
+              durationStr,
+              durationSeconds: durationSec,
+              thumbnail: highResArtwork || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80',
+              views: 'Official YouTube Stream Match',
+            };
+          });
+          setResults(songs);
+          setIsLoading(false);
+          return;
+        }
+      }
+    } catch {
+      // Continue
+    }
+
+    // 4. Fallback to rich curated tracks catalogue & instant direct search card
+    const fallbackList = searchCuratedYouTubeTracks(cleanQuery);
+    const directSearchTrack: YouTubeSearchResult = {
+      id: `search:${encodeURIComponent(cleanQuery)}`,
+      title: cleanQuery,
+      fullTitle: `${cleanQuery} (YouTube Stream)`,
+      artist: 'YouTube Music Search',
+      durationStr: '3:30',
+      durationSeconds: 210,
+      thumbnail: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80',
+      views: 'Instant YouTube Stream',
+    };
+
+    setResults([directSearchTrack, ...fallbackList.filter((t) => t.id !== directSearchTrack.id)]);
     setIsLoading(false);
   };
 
@@ -121,6 +201,16 @@ export const YouTubeStreamView: React.FC<YouTubeStreamViewProps> = ({
     // Initial fetch with fallback pre-loaded
     fetchYouTubeTracks('Top Global Hits');
   }, []);
+
+  useEffect(() => {
+    if (initialQuery && initialQuery.trim()) {
+      const q = initialQuery.trim();
+      setSearchQuery(q);
+      setActiveTag('');
+      fetchYouTubeTracks(q);
+      onClearInitialQuery?.();
+    }
+  }, [initialQuery]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,6 +220,7 @@ export const YouTubeStreamView: React.FC<YouTubeStreamViewProps> = ({
   };
 
   const handleTagClick = (tag: string) => {
+
     setActiveTag(tag);
     setSearchQuery(tag);
     if (CURATED_YOUTUBE_TRACKS[tag]) {
@@ -252,17 +343,32 @@ export const YouTubeStreamView: React.FC<YouTubeStreamViewProps> = ({
                 placeholder="Search song title or artist (e.g. Burna Boy, Asake, Blinding Lights, Drake)..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm bg-[#0c0c0e] border border-white/10 focus:border-[#ff3e3e] focus:outline-none text-[#f2efeb] placeholder:text-[#f2efeb]/40 rounded-xl transition"
+                className="w-full pl-10 pr-9 py-2.5 text-xs sm:text-sm bg-[#0c0c0e] border border-white/10 focus:border-[#ff3e3e] focus:outline-none text-[#f2efeb] placeholder:text-[#f2efeb]/40 rounded-xl transition"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setActiveTag('Top Global Hits');
+                    fetchYouTubeTracks('Top Global Hits');
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#f2efeb]/40 hover:text-white p-1 cursor-pointer transition"
+                  title="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
+
             <button
               type="submit"
-              disabled={isLoading}
               className="bg-[#ff3e3e] hover:bg-[#e03030] text-black font-syne font-bold text-xs sm:text-sm px-4 sm:px-5 py-2.5 rounded-xl uppercase tracking-wider flex items-center gap-2 cursor-pointer transition active:scale-95 shrink-0"
             >
               {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
               <span>Search</span>
             </button>
+
           </form>
 
           {/* Direct Link Streaming Input (Useful on mobile) */}

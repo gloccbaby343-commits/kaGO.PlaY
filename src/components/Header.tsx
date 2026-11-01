@@ -35,9 +35,11 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="sticky top-0 z-30 bg-black/60 backdrop-blur-2xl border-b border-white/[0.08] shadow-[0_4px_30px_rgba(0,0,0,0.3)] px-4 sm:px-8 pt-safe-top pb-3.5 flex items-center justify-between gap-3 transition-colors">
       {/* Brand Logo (Visible on mobile header) */}
       <div className="flex items-center gap-2.5 lg:hidden shrink-0">
-        <div className="w-8 h-8 rounded-xl bg-[#ff3e3e] flex items-center justify-center shadow-[0_0_15px_rgba(255,62,62,0.4)]">
-          <Music2 className="w-4 h-4 text-[#0c0c0e]" />
-        </div>
+        <img
+          src="/assets/aistudio/kaGO_PLay_Logo_6adaa8a1.png"
+          alt="kaGO.PIaY App Logo"
+          className="w-8 h-8 rounded-xl object-cover border border-white/10 shadow-[0_0_15px_rgba(255,62,62,0.35)] shrink-0"
+        />
         <span className="font-syne font-extrabold text-base tracking-tighter text-[#f2efeb] hidden xs:inline">
           kaGO.PIaY
         </span>

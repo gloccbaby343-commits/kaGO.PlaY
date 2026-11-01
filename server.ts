@@ -4,16 +4,23 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 import { generateProceduralVisualizerArt } from './src/utils/visualizerArtGenerator.ts';
+import { extractYtInitialData, extractYouTubeVideosFromData } from './src/utils/youtubeSearchParser.ts';
 
 dotenv.config();
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.APP_PORT ? parseInt(process.env.APP_PORT, 10) : 3000;
 
 app.use(express.json({ limit: '10mb' }));
+
+// Health check routes for Cloud Run deployment liveness and readiness probes
+app.get(['/api/health', '/_health', '/healthz'], (_req, res) => {
+  res.status(200).json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
+});
 
 // Lazy initialize Gemini client
 function getGenAI(): GoogleGenAI | null {
@@ -472,81 +479,92 @@ app.get('/api/youtube/search', async (req, res) => {
   try {
     const rawQuery = ((req.query.q as string) || '').trim();
     const query = rawQuery || 'top global hits 2024';
-    const targetUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 6500);
-
-    const response = await fetch(targetUrl, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
-    }).catch(() => null);
-
-    clearTimeout(timeout);
-
     let videos: any[] = [];
 
-    if (response && response.ok) {
-      const html = await response.text().catch(() => '');
-      const match =
-        html.match(/var ytInitialData = ({.*?});<\/script>/) ||
-        html.match(/ytInitialData\s*=\s*({.+?});/);
-
-      if (match) {
-        try {
-          const data = JSON.parse(match[1]);
-          const contents =
-            data.contents?.twoColumnSearchResultsRenderer?.primaryContents
-              ?.sectionListRenderer?.contents?.[0]?.itemSectionRenderer?.contents || [];
-
-          for (const item of contents) {
-            const v = item.videoRenderer;
-            if (v && v.videoId) {
-              const durationText = v.lengthText?.simpleText || '3:30';
-              const durationSec = parseDurationToSeconds(durationText);
-              const title =
-                v.title?.runs?.[0]?.text ||
-                (typeof v.title?.simpleText === 'string' ? v.title.simpleText : 'Unknown Track');
-              const artist =
-                v.ownerText?.runs?.[0]?.text ||
-                v.longBylineText?.runs?.[0]?.text ||
-                'YouTube Artist';
-              const thumb =
-                v.thumbnail?.thumbnails?.[v.thumbnail.thumbnails.length - 1]?.url ||
-                `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`;
-
-              videos.push({
-                id: v.videoId,
-                title:
-                  title
-                    .replace(/\(Official.*?\)/gi, '')
-                    .replace(/\[Official.*?\]/gi, '')
-                    .replace(/\(Audio\)/gi, '')
-                    .replace(/\(Lyric Video\)/gi, '')
-                    .trim() || title,
-                fullTitle: title,
-                artist,
-                durationStr: durationText,
-                durationSeconds: durationSec > 0 ? durationSec : 210,
-                thumbnail: thumb,
-                views: v.viewCountText?.simpleText || v.shortViewCountText?.simpleText || '',
-              });
-            }
-          }
-        } catch (parseErr) {
-          console.warn('Error parsing ytInitialData:', parseErr);
+    // Helper to query YouTube search endpoint
+    const fetchYouTubeHtml = async (searchUrl: string) => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 6000);
+      try {
+        const response = await fetch(searchUrl, {
+          signal: controller.signal,
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+          },
+        });
+        clearTimeout(timeout);
+        if (response.ok) {
+          return await response.text();
         }
+      } catch (err) {
+        clearTimeout(timeout);
+      }
+      return '';
+    };
+
+    // 1. Primary YouTube search query
+    const targetUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+    let html = await fetchYouTubeHtml(targetUrl);
+
+    if (html) {
+      const initialData = extractYtInitialData(html);
+      if (initialData) {
+        videos = extractYouTubeVideosFromData(initialData);
+      }
+    }
+
+    // 2. If 0 videos found, retry with video-only filter (&sp=EgIQAQ%253D%253D)
+    if (videos.length === 0) {
+      const videoFilterUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&sp=EgIQAQ%253D%253D`;
+      const filterHtml = await fetchYouTubeHtml(videoFilterUrl);
+      if (filterHtml) {
+        const filterData = extractYtInitialData(filterHtml);
+        if (filterData) {
+          videos = extractYouTubeVideosFromData(filterData);
+        }
+      }
+    }
+
+    // 3. Fallback: Query iTunes search to identify real artist songs matching the query
+    if (videos.length === 0 && rawQuery) {
+      try {
+        const itunesUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(rawQuery)}&entity=song&limit=15`;
+        const itunesResp = await fetch(itunesUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+        if (itunesResp.ok) {
+          const itunesData = await itunesResp.json();
+          if (Array.isArray(itunesData.results) && itunesData.results.length > 0) {
+            videos = itunesData.results.map((song: any) => {
+              const fullTitle = `${song.artistName} - ${song.trackName}`;
+              const durationSec = Math.round((song.trackTimeMillis || 210000) / 1000);
+              const mins = Math.floor(durationSec / 60);
+              const secs = durationSec % 60;
+              const durationStr = `${mins}:${secs.toString().padStart(2, '0')}`;
+              const highResArtwork = (song.artworkUrl100 || '').replace(/\/\d+x\d+bb\.jpg/i, '/600x600bb.jpg');
+
+              return {
+                id: `search:${encodeURIComponent(fullTitle)}`,
+                title: song.trackName || rawQuery,
+                fullTitle,
+                artist: song.artistName || 'Artist',
+                durationStr,
+                durationSeconds: durationSec,
+                thumbnail: highResArtwork || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80',
+                views: 'Official Track Match',
+              };
+            });
+          }
+        }
+      } catch (itunesErr) {
+        console.warn('iTunes fallback search error:', itunesErr);
       }
     }
 
     return res.json({
       success: true,
       query,
-      results: videos.slice(0, 24),
+      results: videos.slice(0, 30),
     });
   } catch (err: any) {
     console.error('YouTube search error:', err);
@@ -554,9 +572,14 @@ app.get('/api/youtube/search', async (req, res) => {
   }
 });
 
+
 // Full-Stack Dev & Production mounting
 async function startServer() {
-  if (process.env.NODE_ENV !== 'production') {
+  const isDev =
+    process.env.NODE_ENV === 'development' &&
+    process.env.npm_lifecycle_event !== 'start';
+
+  if (isDev) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: {
@@ -567,9 +590,11 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    app.use(express.static(path.resolve(__dirname, 'dist')));
+    // Production / npm start: Serve built client assets from dist
+    const distPath = path.resolve(__dirname, 'dist');
+    app.use(express.static(distPath));
     app.get('*', (_req, res) => {
-      res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
+      res.sendFile(path.resolve(distPath, 'index.html'));
     });
   }
 
